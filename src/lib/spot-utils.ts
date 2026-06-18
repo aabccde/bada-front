@@ -46,7 +46,7 @@ export function sortSpots(spots: Spot[], key: SortKey, opts: SortOpts = {}): Spo
       break;
     case "community": {
       const c = opts.counts ?? {};
-      arr.sort((a, b) => (c[b.id] ?? 0) - (c[a.id] ?? 0));
+      arr.sort((a, b) => (c[b.id] ?? b.postCount ?? 0) - (c[a.id] ?? a.postCount ?? 0));
       break;
     }
     case "distance": {

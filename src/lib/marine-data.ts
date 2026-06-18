@@ -51,6 +51,8 @@ export interface BaseSpot {
   predcYmd: string;
   predcNoonSeCd?: "오전" | "오후";
   totalIndex: IndexLabel;
+  postCount?: number;
+  favorite?: boolean;
 }
 
 export interface TravelSpot extends BaseSpot {

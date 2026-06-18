@@ -63,6 +63,22 @@ button {
   backdrop-filter: blur(14px);
 }
 
+.api-status {
+  display: flex;
+  justify-content: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: #eff6ff;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.api-status.error {
+  background: #fef2f2;
+  color: var(--destructive);
+}
+
 .brand {
   border: 0;
   background: transparent;
@@ -917,6 +933,14 @@ textarea:focus {
   font-weight: 800;
 }
 
+.detail-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .field-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -1003,11 +1027,25 @@ textarea:focus {
   font-size: 12px;
 }
 
-.post-head button {
+.post-actions,
+.comment-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.post-head button,
+.comment-actions button {
   border: 0;
   background: transparent;
-  color: var(--destructive);
+  color: var(--primary);
   font-weight: 900;
+}
+
+.post-head button:last-child,
+.comment-actions button:last-child {
+  color: var(--destructive);
 }
 
 .post img {
@@ -1035,6 +1073,11 @@ textarea:focus {
   margin-left: 8px;
   color: var(--muted);
   font-size: 11px;
+}
+
+.comment-actions {
+  margin-top: 6px;
+  justify-content: flex-start;
 }
 
 .account-page {

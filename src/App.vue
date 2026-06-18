@@ -5,7 +5,7 @@ import {
   EXPERIENCE_LABELS,
   INDEX_LEVEL,
   SPOTS_BY_EXPERIENCE,
-  getSpot,
+  getSpot as getStaticSpot,
   getSpots,
   indexTone,
   type ExperienceKey,
@@ -20,6 +20,20 @@ import {
   sortSpots,
   type SortKey,
 } from './lib/spot-utils'
+import {
+  API_BASE_URL,
+  authApi,
+  clearAccessToken,
+  getAccessToken,
+  normalizeSpot,
+  postApi,
+  setAccessToken,
+  spotApi,
+  userApi,
+  type ApiComment,
+  type ApiPost,
+  type ApiUser,
+} from './lib/api'
 import LeafletMap from './components/LeafletMap.vue'
 
 type Page = 'home' | 'all' | 'spot' | 'auth' | 'me' | 'settings'
@@ -29,9 +43,12 @@ type CommunityPost = {
   title: string
   content: string
   imageUrl: string | null
+  imageUrls: string[]
   createdAt: string
   author: string
   authorEmail?: string
+  likeCount: number
+  liked: boolean
   comments: CommunityComment[]
 }
 type CommunityComment = {
@@ -69,13 +86,34 @@ const user = reactive({
 })
 const community = ref<CommunityPost[]>([])
 const postForm = reactive({ title: '', content: '', imageUrl: '' })
+const postImageFiles = ref<File[]>([])
 const commentDrafts = reactive<Record<string, string>>({})
 const openPostId = ref<string | null>(null)
+const favoriteIds = ref<Set<string>>(new Set())
+const favoriteSpots = ref<Spot[]>([])
 const headerQuery = ref('')
 const profileMenuOpen = ref(false)
 const authMode = ref<'signin' | 'signup'>('signin')
 const authForm = reactive({ email: '', password: '', displayName: '' })
 const authMessage = ref('')
+const apiState = reactive({ loading: false, error: '' })
+const remoteSpots = reactive<Record<ExperienceKey, Spot[]>>({
+  travel: [],
+  surfing: [],
+  fishing: [],
+  scuba: [],
+  mudflat: [],
+  swimming: [],
+})
+const homeCards = reactive<Record<ExperienceKey, Spot[]>>({
+  travel: [],
+  surfing: [],
+  fishing: [],
+  scuba: [],
+  mudflat: [],
+  swimming: [],
+})
+const remoteSpotDetails = reactive<Record<string, Spot>>({})
 const settingsForm = reactive({
   displayName: '',
   newPassword: '',
@@ -86,16 +124,27 @@ const settingsForm = reactive({
 const dateOptions = computed(() => getDateOptions())
 const counts = computed<Record<string, number>>(() => {
   const acc: Record<string, number> = {}
+  for (const spot of Object.values(remoteSpots).flat()) {
+    if (spot.postCount != null) acc[spot.id] = spot.postCount
+  }
+  for (const spot of Object.values(homeCards).flat()) {
+    if (spot.postCount != null) acc[spot.id] = spot.postCount
+  }
+  for (const spot of favoriteSpots.value) {
+    if (spot.postCount != null) acc[spot.id] = spot.postCount
+  }
   for (const post of community.value) acc[post.spotId] = (acc[post.spotId] ?? 0) + 1
   return acc
 })
 
-const homeSpots = computed(() => getSpots(homeExperience.value))
-const homeSorted = computed(() => sortSpots(homeSpots.value, homeSort.value, { counts: counts.value, userLoc: geo.loc }))
+const homeSpots = computed(() => spotsFor(homeExperience.value))
+const homeCardSpots = computed(() => homeCards[homeExperience.value].length ? homeCards[homeExperience.value] : homeSpots.value)
+const homeSorted = computed(() => sortSpots(homeCardSpots.value, homeSort.value, { counts: counts.value, userLoc: geo.loc }))
+const homeMapSpots = computed(() => sortSpots(homeSpots.value, homeSort.value, { counts: counts.value, userLoc: geo.loc }))
 const homePreview = computed(() => homeSorted.value.slice(0, 6))
 const homeDateLabel = computed(() => dateOptions.value.find((o) => o.value === selectedDate.value)?.label ?? selectedDate.value)
 
-const allSpots = computed(() => SPOTS_BY_EXPERIENCE[allExp.value])
+const allSpots = computed(() => spotsFor(allExp.value))
 const regions = computed(() => {
   const map = new Map<string, number>()
   for (const spot of allSpots.value) {
@@ -128,10 +177,40 @@ onMounted(() => {
   loadCommunity()
   applyRoute()
   window.addEventListener('popstate', applyRoute)
+  void restoreSession()
+  void loadHomeData()
+  void loadAllData()
 })
 
 watch([page, spotId, allExp, allSort, allQuery, allRegion], () => {
   document.title = titleForPage()
+})
+
+watch([homeExperience, selectedDate, homeSort], () => {
+  void loadHomeData()
+})
+
+watch([allExp, listDate, allSort], () => {
+  void loadAllData()
+})
+
+watch(
+  () => geo.loc,
+  () => {
+    void loadHomeData()
+    void loadAllData()
+  },
+)
+
+watch([page, spotId, listDate], () => {
+  if (page.value === 'spot' && spotId.value) {
+    void loadSpotDetail(spotId.value)
+    void loadPosts(spotId.value)
+  }
+  if (page.value === 'me') {
+    void loadMyPosts()
+    void loadFavoriteSpots()
+  }
 })
 
 function applyRoute() {
@@ -185,6 +264,191 @@ function parseSort(value: string | null): SortKey {
   return VALID_SORT.includes(value as SortKey) ? (value as SortKey) : 'index'
 }
 
+function spotsFor(exp: ExperienceKey) {
+  return remoteSpots[exp].length ? remoteSpots[exp] : getSpots(exp)
+}
+
+function getSpot(id: string) {
+  return remoteSpotDetails[id]
+    ?? Object.values(homeCards).flat().find((spot) => spot.id === id)
+    ?? Object.values(remoteSpots).flat().find((spot) => spot.id === id)
+    ?? getStaticSpot(id)
+}
+
+function fallbackFor(raw: Record<string, unknown>, exp: ExperienceKey) {
+  const id = String(raw.spotId ?? raw.id ?? '')
+  const name = String(raw.spotName ?? raw.name ?? '')
+  return getStaticSpot(id) ?? SPOTS_BY_EXPERIENCE[exp].find((spot) => spot.name === name)
+}
+
+function apiErrorMessage(error: unknown) {
+  const anyError = error as { response?: { data?: unknown; status?: number }; message?: string }
+  const data = anyError.response?.data
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>
+    return String(obj.message ?? obj.error ?? `API 오류 (${anyError.response?.status ?? ''})`)
+  }
+  return anyError.message || 'API 요청에 실패했습니다.'
+}
+
+async function loadHomeData() {
+  apiState.loading = true
+  try {
+    const [cards, markers] = await Promise.all([
+      spotApi.dashboard(homeExperience.value, selectedDate.value, homeSort.value, 6, geo.loc),
+      spotApi.markers(homeExperience.value, selectedDate.value),
+    ])
+    if (cards.length) {
+      homeCards[homeExperience.value] = await normalizeSpotRows(cards, homeExperience.value, selectedDate.value)
+      syncFavoriteIds(homeCards[homeExperience.value])
+    }
+    if (markers.length) {
+      remoteSpots[homeExperience.value] = markers.map((row) => normalizeSpot(row, fallbackFor(row, homeExperience.value)))
+    } else if (!remoteSpots[homeExperience.value].length) {
+      const rows = await spotApi.list(homeExperience.value, selectedDate.value, homeSort.value, '', geo.loc)
+      if (rows.length) remoteSpots[homeExperience.value] = rows.map((row) => normalizeSpot(row, fallbackFor(row, homeExperience.value)))
+    }
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  } finally {
+    apiState.loading = false
+  }
+}
+
+async function loadAllData() {
+  await loadSpotList(allExp.value, listDate.value, allSort.value, allQuery.value)
+}
+
+async function loadSpotList(exp: ExperienceKey, targetDate: string, sort: SortKey, keyword = '', fallbackLimit?: number) {
+  apiState.loading = true
+  try {
+    const rows = fallbackLimit
+      ? await spotApi.dashboard(exp, targetDate, sort, fallbackLimit, geo.loc)
+      : await spotApi.list(exp, targetDate, sort, keyword, geo.loc)
+    const source = rows.length ? rows : await spotApi.dashboard(exp, targetDate, sort, fallbackLimit ?? 100, geo.loc)
+    if (source.length) {
+      remoteSpots[exp] = await normalizeSpotRows(source, exp, targetDate)
+      syncFavoriteIds(remoteSpots[exp])
+      apiState.error = ''
+    }
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  } finally {
+    apiState.loading = false
+  }
+}
+
+async function normalizeSpotRows(rows: Record<string, unknown>[], exp: ExperienceKey, targetDate: string) {
+  const spots = rows.map((row) => normalizeSpot(row, fallbackFor(row, exp)))
+  const enriched = await Promise.all(
+    spots.map(async (spot, index) => {
+      if (rowHasPreviewMetrics(rows[index], spot.experience) || rowHasPreviewValues(rows[index], spot.experience)) return spot
+      try {
+        const raw = await spotApi.detail(spot.id, spot.predcYmd || targetDate)
+        return normalizeSpot(raw, spot)
+      } catch {
+        return spot
+      }
+    }),
+  )
+  return enriched
+}
+
+function rowHasPreviewValues(row: Record<string, unknown>, exp: ExperienceKey) {
+  const flat = flattenValues(row)
+  switch (exp) {
+    case 'travel':
+      return hasAny(flat, ['weather', 'tide', 'tdlvHrCn', 'airTemperature', 'avgArtmp', 'waterTemperature', 'avgWtem', 'waveHeight', 'avgWvhgt', 'windSpeed', 'avgWspd'])
+    case 'swimming':
+      return hasAny(flat, ['openStatus', 'opnStat', 'waterTemperature', 'avgWtem', 'waveHeight', 'maxWvhgt', 'windSpeed', 'maxWspd'])
+    case 'fishing':
+      return hasAny(flat, ['airTemperature', 'minArtmp', 'maxArtmp'])
+        && hasAny(flat, ['waterTemperature', 'minWtem', 'maxWtem'])
+        && hasAny(flat, ['waveHeight', 'minWvhgt', 'maxWvhgt'])
+        && hasAny(flat, ['currentSpeed', 'currentVelocity', 'flowSpeed', 'minCrsp', 'maxCrsp'])
+    case 'scuba':
+      return hasAny(flat, ['tide', 'tdlvHrCn', 'waterTemperature', 'maxWtem', 'waveHeight', 'maxWvhgt', 'currentSpeed', 'currentVelocity', 'maxCrsp'])
+    case 'mudflat':
+      return hasAny(flat, ['experienceStartTime', 'startTime', 'beginTime', 'mdftExprnBgngTm', 'mdftExprnBgnTm'])
+        && hasAny(flat, ['experienceEndTime', 'endTime', 'mdftExprnEndTm'])
+        && hasAny(flat, ['airTemperature', 'maxArtmp', 'minArtmp', 'windSpeed', 'maxWspd', 'minWspd'])
+    case 'surfing':
+      return hasAny(flat, ['waveHeight', 'avgWvhgt', 'wavePeriod', 'avgWvpd', 'windSpeed', 'avgWspd', 'waterTemperature', 'avgWtem', 'grade', 'grdCn'])
+  }
+}
+
+function rowHasPreviewMetrics(row: Record<string, unknown>, exp: ExperienceKey) {
+  const metrics = row.metrics
+  if (!metrics || typeof metrics !== 'object') return false
+  const flat = flattenValues(metrics)
+  switch (exp) {
+    case 'travel':
+      return hasAny(flat, ['weather', 'tide', 'airTemperature', 'waterTemperature', 'waveHeight', 'windSpeed'])
+    case 'swimming':
+      return hasAny(flat, ['openStatus', 'openingStatus', 'waterTemperature', 'waveHeight', 'windSpeed'])
+    case 'fishing':
+      return hasAny(flat, ['airTemperature', 'minArtmp', 'maxArtmp'])
+        && hasAny(flat, ['waterTemperature', 'minWtem', 'maxWtem'])
+        && hasAny(flat, ['waveHeight', 'minWvhgt', 'maxWvhgt'])
+        && hasAny(flat, ['currentSpeed', 'currentVelocity', 'flowSpeed', 'minCrsp', 'maxCrsp'])
+    case 'scuba':
+      return hasAny(flat, ['tide', 'waterTemperature', 'waveHeight', 'currentSpeed', 'currentVelocity'])
+    case 'mudflat':
+      return hasAny(flat, ['experienceStartTime', 'startTime', 'beginTime', 'mdftExprnBgngTm', 'mdftExprnBgnTm'])
+        && hasAny(flat, ['experienceEndTime', 'endTime', 'mdftExprnEndTm'])
+        && hasAny(flat, ['airTemperature', 'maxArtmp', 'minArtmp', 'windSpeed', 'maxWspd', 'minWspd'])
+    case 'surfing':
+      return hasAny(flat, ['waveHeight', 'wavePeriod', 'windSpeed', 'waterTemperature', 'grade'])
+  }
+}
+
+function flattenValues(value: unknown): Record<string, unknown> {
+  if (!value || typeof value !== 'object') return {}
+  if (Array.isArray(value)) return flattenValues(value[0])
+  const out: Record<string, unknown> = {}
+  for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+    if (child && typeof child === 'object') Object.assign(out, flattenValues(child))
+    else out[key.toLowerCase().replace(/[^a-z0-9가-힣]/g, '')] = child
+  }
+  return out
+}
+
+function hasAny(flat: Record<string, unknown>, keys: string[]) {
+  return keys.some((key) => {
+    const value = flat[key.toLowerCase().replace(/[^a-z0-9가-힣]/g, '')]
+    return value !== undefined && value !== null && value !== ''
+  })
+}
+
+async function loadSpotDetail(id: string) {
+  const fallback = getSpot(id)
+  try {
+    const raw = await spotApi.detail(id, targetDateForSpot(id))
+    remoteSpotDetails[id] = normalizeSpot(raw, fallback)
+    syncFavoriteIds([remoteSpotDetails[id]])
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  }
+}
+
+function targetDateForSpot(id: string) {
+  const remote = remoteSpotDetails[id]
+    ?? Object.values(homeCards).flat().find((spot) => spot.id === id)
+    ?? Object.values(remoteSpots).flat().find((spot) => spot.id === id)
+  return remote?.predcYmd || (page.value === 'all' ? listDate.value : selectedDate.value)
+}
+
+async function restoreSession() {
+  if (!getAccessToken()) return
+  try {
+    applyUser(await userApi.me())
+  } catch {
+    clearAccessToken()
+  }
+}
+
 function setAllExp(exp: ExperienceKey) {
   allExp.value = exp
   allRegion.value = undefined
@@ -204,6 +468,7 @@ function setAllRegion(region?: string) {
 
 function onAllQueryInput() {
   updateAllUrl()
+  void loadAllData()
 }
 
 function setHomeSort(sort: SortKey) {
@@ -402,8 +667,11 @@ function loadCommunity() {
       title: '오전 산책 코스가 좋았습니다',
       content: '바람이 약하고 파고가 낮아 해안도로 이동이 편했습니다.',
       imageUrl: null,
+      imageUrls: [],
       createdAt: new Date().toISOString(),
       author: '익명',
+      likeCount: 0,
+      liked: false,
       comments: [],
     },
     {
@@ -412,53 +680,269 @@ function loadCommunity() {
       title: '중급자 연습에 적당한 파도',
       content: '주기가 안정적이라 오전 타임이 특히 괜찮았습니다.',
       imageUrl: null,
+      imageUrls: [],
       createdAt: new Date().toISOString(),
       author: '익명',
+      likeCount: 0,
+      liked: false,
       comments: [],
     },
   ]
   saveCommunity()
 }
 
+async function loadPosts(targetSpotId: string) {
+  try {
+    const posts = await postApi.list(targetSpotId)
+    const mapped = posts.map((post) => mapPost(post, targetSpotId))
+    community.value = [
+      ...community.value.filter((post) => post.spotId !== targetSpotId),
+      ...mapped,
+    ].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    saveCommunity()
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  }
+}
+
+async function loadMyPosts() {
+  if (!user.loggedIn) return
+  try {
+    const posts = await userApi.posts()
+    const mapped = posts.map((post) => mapPost(post, String(post.spotId ?? '')))
+    const ids = new Set(mapped.map((post) => post.id))
+    community.value = [...community.value.filter((post) => !ids.has(post.id)), ...mapped]
+    saveCommunity()
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  }
+}
+
+async function loadFavoriteSpots() {
+  if (!user.loggedIn) return
+  try {
+    const rows = await userApi.favoriteSpots(listDate.value)
+    favoriteSpots.value = rows.map((row) => {
+      const exp = String(row.experience) === 'seaTravel' ? 'travel' : String(row.experience)
+      return normalizeSpot(row, fallbackFor(row, VALID_EXP.includes(exp as ExperienceKey) ? (exp as ExperienceKey) : 'travel'))
+    })
+    favoriteIds.value = new Set([...favoriteIds.value, ...favoriteSpots.value.map((spot) => spot.id)])
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  }
+}
+
+function syncFavoriteIds(spots: Spot[]) {
+  const next = new Set(favoriteIds.value)
+  for (const spot of spots) {
+    if (spot.favorite) next.add(spot.id)
+  }
+  favoriteIds.value = next
+}
+
+async function togglePost(post: CommunityPost) {
+  openPostId.value = openPostId.value === post.id ? null : post.id
+  if (openPostId.value !== post.id || post.comments.length) return
+  try {
+    post.comments = (await postApi.comments(post.id)).map(mapComment)
+    saveCommunity()
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  }
+}
+
 function saveCommunity() {
   localStorage.setItem('marinepro-community', JSON.stringify(community.value))
 }
 
-function submitPost() {
+async function submitPost() {
   if (!currentSpot.value || !postForm.title.trim() || !postForm.content.trim()) return
-  community.value.unshift({
-    id: crypto.randomUUID(),
-    spotId: currentSpot.value.id,
+  let imageUrls = postForm.imageUrl.trim() ? [postForm.imageUrl.trim()] : []
+  if (postImageFiles.value.length) {
+    try {
+      imageUrls = await postApi.uploadImages(postImageFiles.value)
+      apiState.error = ''
+    } catch (error) {
+      apiState.error = apiErrorMessage(error)
+    }
+  }
+  const draft = {
     title: postForm.title.trim().slice(0, 120),
     content: postForm.content.trim().slice(0, 2000),
-    imageUrl: postForm.imageUrl.trim() || null,
-    createdAt: new Date().toISOString(),
-    author: user.name,
-    authorEmail: user.email,
-    comments: [],
-  })
+    imageUrl: imageUrls[0] ?? null,
+    imageUrls,
+  }
+  try {
+    const created = await postApi.create(currentSpot.value.id, draft)
+    community.value.unshift(mapPost(created, currentSpot.value.id))
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+    community.value.unshift({
+      id: crypto.randomUUID(),
+      spotId: currentSpot.value.id,
+      ...draft,
+      createdAt: new Date().toISOString(),
+      author: user.name,
+      authorEmail: user.email,
+      likeCount: 0,
+      liked: false,
+      comments: [],
+    })
+  }
   postForm.title = ''
   postForm.content = ''
   postForm.imageUrl = ''
+  postImageFiles.value = []
   saveCommunity()
 }
 
-function deletePost(id: string) {
+async function deletePost(id: string) {
+  try {
+    await postApi.delete(id)
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  }
   community.value = community.value.filter((post) => post.id !== id)
   saveCommunity()
 }
 
-function submitComment(post: CommunityPost) {
+async function submitComment(post: CommunityPost) {
   const draft = commentDrafts[post.id]?.trim()
   if (!draft) return
-  post.comments.push({
-    id: crypto.randomUUID(),
-    content: draft.slice(0, 1000),
-    createdAt: new Date().toISOString(),
-    author: user.name,
-  })
+  try {
+    const created = await postApi.createComment(post.id, { content: draft.slice(0, 1000) })
+    post.comments.push(mapComment(created))
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+    post.comments.push({
+      id: crypto.randomUUID(),
+      content: draft.slice(0, 1000),
+      createdAt: new Date().toISOString(),
+      author: user.name,
+    })
+  }
   commentDrafts[post.id] = ''
   saveCommunity()
+}
+
+async function toggleLike(post: CommunityPost) {
+  if (!user.loggedIn) {
+    navigate('/auth')
+    return
+  }
+  const wasLiked = post.liked
+  post.liked = !wasLiked
+  post.likeCount += wasLiked ? -1 : 1
+  try {
+    if (wasLiked) await postApi.unlike(post.id)
+    else await postApi.like(post.id)
+    apiState.error = ''
+  } catch (error) {
+    post.liked = wasLiked
+    post.likeCount += wasLiked ? 1 : -1
+    apiState.error = apiErrorMessage(error)
+  }
+  saveCommunity()
+}
+
+async function editPost(post: CommunityPost) {
+  const title = window.prompt('수정할 제목을 입력하세요.', post.title)?.trim()
+  if (!title) return
+  const content = window.prompt('수정할 내용을 입력하세요.', post.content)?.trim()
+  if (!content) return
+  try {
+    const updated = await postApi.update(post.id, { title, content, imageUrls: post.imageUrls })
+    Object.assign(post, mapPost(updated, post.spotId))
+    apiState.error = ''
+  } catch (error) {
+    post.title = title
+    post.content = content
+    apiState.error = apiErrorMessage(error)
+  }
+  saveCommunity()
+}
+
+async function editComment(comment: CommunityComment) {
+  const content = window.prompt('수정할 댓글을 입력하세요.', comment.content)?.trim()
+  if (!content) return
+  try {
+    Object.assign(comment, mapComment(await postApi.updateComment(comment.id, { content })))
+    apiState.error = ''
+  } catch (error) {
+    comment.content = content
+    apiState.error = apiErrorMessage(error)
+  }
+  saveCommunity()
+}
+
+async function deleteComment(post: CommunityPost, commentId: string) {
+  try {
+    await postApi.deleteComment(commentId)
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  }
+  post.comments = post.comments.filter((comment) => comment.id !== commentId)
+  saveCommunity()
+}
+
+function onPostImages(event: Event) {
+  const input = event.target as HTMLInputElement
+  postImageFiles.value = [...(input.files ?? [])].slice(0, 5)
+}
+
+async function toggleFavorite(spot: Spot) {
+  if (!user.loggedIn) {
+    navigate('/auth')
+    return
+  }
+  const next = new Set(favoriteIds.value)
+  const wasFavorite = next.has(spot.id)
+  if (wasFavorite) next.delete(spot.id)
+  else next.add(spot.id)
+  favoriteIds.value = next
+  try {
+    if (wasFavorite) await spotApi.unfavorite(spot.id)
+    else await spotApi.favorite(spot.id)
+    await loadFavoriteSpots()
+    apiState.error = ''
+  } catch (error) {
+    favoriteIds.value = new Set(wasFavorite ? [...next, spot.id] : [...next].filter((id) => id !== spot.id))
+    apiState.error = apiErrorMessage(error)
+  }
+}
+
+function mapPost(post: ApiPost, fallbackSpotId: string): CommunityPost {
+  const imageUrls = post.imageUrls ?? (post.imageUrl ? [post.imageUrl] : post.thumbnailUrl ? [post.thumbnailUrl] : [])
+  return {
+    id: String(post.postId ?? post.id ?? crypto.randomUUID()),
+    spotId: String(post.spotId ?? fallbackSpotId),
+    title: post.title ?? '제목 없음',
+    content: post.content ?? '',
+    imageUrl: imageUrls[0] ?? null,
+    imageUrls,
+    createdAt: post.createdAt ?? new Date().toISOString(),
+    author: post.author ?? post.nickname ?? post.writer?.nickname ?? post.user?.nickname ?? '익명',
+    authorEmail: post.writer?.email ?? post.user?.email,
+    likeCount: post.likeCount ?? 0,
+    liked: post.liked ?? false,
+    comments: post.comments?.map(mapComment) ?? [],
+  }
+}
+
+function mapComment(comment: ApiComment): CommunityComment {
+  return {
+    id: String(comment.commentId ?? comment.id ?? crypto.randomUUID()),
+    content: comment.content,
+    createdAt: comment.createdAt ?? new Date().toISOString(),
+    author: comment.author ?? comment.nickname ?? comment.writer?.nickname ?? comment.user?.nickname ?? '익명',
+  }
 }
 
 function loadUser() {
@@ -481,7 +965,18 @@ function saveUser() {
   localStorage.setItem('marinepro-user', JSON.stringify(user))
 }
 
-function submitAuth() {
+function applyUser(apiUser: ApiUser, accessToken?: string) {
+  if (accessToken) setAccessToken(accessToken)
+  user.loggedIn = true
+  user.email = apiUser.email
+  user.name = apiUser.nickname
+  user.avatarUrl = apiUser.profileImageUrl || ''
+  user.createdAt = apiUser.createdAt || user.createdAt || new Date().toISOString()
+  settingsForm.displayName = user.name
+  saveUser()
+}
+
+async function submitAuth() {
   authMessage.value = ''
   const email = authForm.email.trim()
   const password = authForm.password
@@ -499,14 +994,16 @@ function submitAuth() {
     return
   }
 
-  user.loggedIn = true
-  user.email = email
-  user.name = authMode.value === 'signup' ? displayName.slice(0, 40) : displayName || email.split('@')[0]
-  user.createdAt = user.createdAt || new Date().toISOString()
-  settingsForm.displayName = user.name
-  saveUser()
-  authForm.password = ''
-  navigate('/')
+  try {
+    const result = authMode.value === 'signup'
+      ? await authApi.signup({ email, password, nickname: displayName.slice(0, 40) })
+      : await authApi.login({ email, password })
+    applyUser(result.user, result.accessToken)
+    authForm.password = ''
+    navigate('/')
+  } catch (error) {
+    authMessage.value = apiErrorMessage(error)
+  }
 }
 
 function toggleAuthMode() {
@@ -515,34 +1012,63 @@ function toggleAuthMode() {
 }
 
 function mockOAuth(provider: string) {
-  authMessage.value = `${provider} OAuth는 프로토타입 버튼만 제공됩니다.`
+  window.location.href = authApi.oauthUrl(provider.toLowerCase())
 }
 
-function signOut() {
+async function signOut() {
+  try {
+    await authApi.logout()
+  } catch {
+    clearAccessToken()
+  }
   user.loggedIn = false
   saveUser()
   navigate('/')
 }
 
-function saveProfile() {
+async function saveProfile() {
   const name = settingsForm.displayName.trim()
   if (!name) return
+  try {
+    const updated = await userApi.updateMe({ nickname: name.slice(0, 40) })
+    applyUser({ ...updated, email: updated.email ?? user.email, nickname: updated.nickname ?? name.slice(0, 40) })
+    apiState.error = ''
+    return
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  }
   user.name = name.slice(0, 40)
   saveUser()
 }
 
-function changePassword() {
+async function changePassword() {
   if (settingsForm.newPassword.length < 6) return
   if (settingsForm.newPassword !== settingsForm.confirmPassword) return
+  try {
+    await userApi.changePassword({
+      newPassword: settingsForm.newPassword,
+      newPasswordConfirm: settingsForm.confirmPassword,
+    })
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  }
   settingsForm.newPassword = ''
   settingsForm.confirmPassword = ''
 }
 
-function deleteAccount() {
+async function deleteAccount() {
   if (settingsForm.deleteText.trim() !== '회원탈퇴') return
+  try {
+    await userApi.deleteMe()
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+  }
   community.value = community.value.filter((post) => post.authorEmail !== user.email)
   saveCommunity()
   localStorage.removeItem('marinepro-user')
+  clearAccessToken()
   user.loggedIn = false
   user.name = 'Marine User'
   user.email = 'demo@marinepro.kr'
@@ -557,10 +1083,24 @@ function onAvatarFile(event: Event) {
   const file = input.files?.[0]
   input.value = ''
   if (!file || !file.type.startsWith('image/') || file.size > 5 * 1024 * 1024) return
+  if (user.loggedIn) {
+    void userApi.uploadImage(file)
+      .then((result) => {
+        if (result.profileImageUrl) {
+          user.avatarUrl = result.profileImageUrl
+          saveUser()
+        }
+      })
+      .catch((error) => {
+        apiState.error = apiErrorMessage(error)
+      })
+  }
   const reader = new FileReader()
   reader.onload = () => {
-    user.avatarUrl = String(reader.result || '')
-    saveUser()
+    if (!user.avatarUrl.startsWith('http')) {
+      user.avatarUrl = String(reader.result || '')
+      saveUser()
+    }
   }
   reader.readAsDataURL(file)
 }
@@ -619,6 +1159,10 @@ function titleForPage() {
       </div>
     </nav>
 
+    <div v-if="apiState.loading || apiState.error" class="api-status" :class="{ error: apiState.error }">
+      <span>{{ apiState.loading ? `API 연결 중 · ${API_BASE_URL}` : `API 오류 · ${apiState.error}` }}</span>
+    </div>
+
     <main v-if="page === 'home'" class="page dashboard">
       <header class="hero">
         <div>
@@ -654,12 +1198,12 @@ function titleForPage() {
         </div>
         <div class="legend"><span class="good"></span>좋음 <span class="warn"></span>보통 <span class="bad"></span>나쁨</div>
       </section>
-      <LeafletMap :spots="homeSorted" :height="420" @navigate="(id) => navigate(`/spot/${id}`)" />
+      <LeafletMap :spots="homeMapSpots" :height="420" @navigate="(id) => navigate(`/spot/${id}`)" />
 
       <section class="list-head">
         <div>
           <h2>{{ EXPERIENCE_LABELS[homeExperience] }} 지수 · {{ homeDateLabel }}</h2>
-          <p>{{ homeSorted.length }}개 스팟 · 상위 {{ homePreview.length }}개 표시</p>
+          <p>{{ homeSpots.length }}개 스팟 · 상위 {{ homePreview.length }}개 표시</p>
         </div>
         <div class="list-actions">
           <div class="sort-controls">
@@ -781,11 +1325,16 @@ function titleForPage() {
       <button class="back-link" type="button" @click="navigate('/')">← 대시보드</button>
       <section class="detail-head">
         <div>
-          <span class="eyebrow">{{ EXPERIENCE_LABELS[currentSpot.experience] }} · {{ currentSpot.region }}</span>
+        <span class="eyebrow">{{ EXPERIENCE_LABELS[currentSpot.experience] }} · {{ currentSpot.region }}</span>
           <h1>{{ currentSpot.name }}</h1>
           <p>{{ currentSpot.lat.toFixed(4) }}°N · {{ currentSpot.lot.toFixed(4) }}°E · {{ currentSpot.predcYmd }}</p>
         </div>
-        <span class="big-chip" :class="indexTone(currentSpot.totalIndex).chip">{{ EXPERIENCE_LABELS[currentSpot.experience] }}지수 · {{ currentSpot.totalIndex }}</span>
+        <div class="detail-actions">
+          <button class="btn outline" type="button" @click="toggleFavorite(currentSpot)">
+            {{ favoriteIds.has(currentSpot.id) ? '즐겨찾기 해제' : '즐겨찾기' }}
+          </button>
+          <span class="big-chip" :class="indexTone(currentSpot.totalIndex).chip">{{ EXPERIENCE_LABELS[currentSpot.experience] }}지수 · {{ currentSpot.totalIndex }}</span>
+        </div>
       </section>
       <section class="field-grid">
         <div v-for="[label, value] in detailFields(currentSpot)" :key="label">
@@ -816,6 +1365,7 @@ function titleForPage() {
           <input v-model="postForm.title" maxlength="120" placeholder="제목" />
           <textarea v-model="postForm.content" maxlength="2000" rows="3" placeholder="내용을 입력하세요"></textarea>
           <input v-model="postForm.imageUrl" placeholder="이미지 URL (선택)" />
+          <input type="file" accept="image/*" multiple @change="onPostImages" />
           <button class="btn primary" type="submit">게시글 작성</button>
         </form>
         <div v-else class="login-callout">
@@ -826,16 +1376,24 @@ function titleForPage() {
         <article v-for="post in spotPosts" :key="post.id" class="post">
           <div class="post-head">
             <div><h3>{{ post.title }}</h3><p>{{ post.author }} · {{ fmt(post.createdAt) }}</p></div>
-            <button v-if="user.loggedIn && post.authorEmail === user.email" type="button" @click="deletePost(post.id)">삭제</button>
+            <div class="post-actions">
+              <button type="button" @click="toggleLike(post)">{{ post.liked ? '좋아요 취소' : '좋아요' }} {{ post.likeCount }}</button>
+              <button v-if="user.loggedIn && post.authorEmail === user.email" type="button" @click="editPost(post)">수정</button>
+              <button v-if="user.loggedIn && post.authorEmail === user.email" type="button" @click="deletePost(post.id)">삭제</button>
+            </div>
           </div>
           <p>{{ post.content }}</p>
           <img v-if="post.imageUrl" :src="post.imageUrl" alt="" />
-          <button class="link-button" type="button" @click="openPostId = openPostId === post.id ? null : post.id">{{ openPostId === post.id ? '댓글 숨기기' : '댓글 보기 / 작성' }}</button>
+          <button class="link-button" type="button" @click="togglePost(post)">{{ openPostId === post.id ? '댓글 숨기기' : '댓글 보기 / 작성' }}</button>
           <div v-if="openPostId === post.id" class="comments">
             <p v-if="!post.comments.length" class="muted">아직 댓글이 없습니다.</p>
             <div v-for="comment in post.comments" :key="comment.id" class="comment">
               <strong>{{ comment.author }}</strong><span>{{ fmt(comment.createdAt) }}</span>
               <p>{{ comment.content }}</p>
+              <div v-if="user.loggedIn && comment.author === user.name" class="comment-actions">
+                <button type="button" @click="editComment(comment)">수정</button>
+                <button type="button" @click="deleteComment(post, comment.id)">삭제</button>
+              </div>
             </div>
             <form v-if="user.loggedIn" @submit.prevent="submitComment(post)">
               <input v-model="commentDrafts[post.id]" maxlength="1000" placeholder="댓글을 입력하세요" />
@@ -890,9 +1448,24 @@ function titleForPage() {
       <section v-else class="my-page">
         <header class="account-header">
           <span class="eyebrow">내 활동</span>
-          <h1>{{ user.name || '내' }}님의 게시글</h1>
-          <p>지금까지 작성한 모든 커뮤니티 글을 확인할 수 있습니다.</p>
+          <h1>{{ user.name || '내' }}님의 활동</h1>
+          <p>작성한 커뮤니티 글과 즐겨찾기 스팟을 확인할 수 있습니다.</p>
         </header>
+
+        <section class="settings-card">
+          <h2>즐겨찾기 스팟</h2>
+          <div v-if="!favoriteSpots.length" class="empty">아직 즐겨찾기한 스팟이 없습니다.</div>
+          <div v-else class="my-post-list">
+            <button v-for="spot in favoriteSpots" :key="spot.id" class="my-post-card" type="button" @click="navigate(`/spot/${spot.id}`)">
+              <div>
+                <span>{{ EXPERIENCE_LABELS[spot.experience] }} · {{ spot.region }}</span>
+                <small>{{ spot.predcYmd || listDate }}</small>
+              </div>
+              <h2>{{ spot.name }}</h2>
+              <p>종합 지수 {{ spot.totalIndex }}</p>
+            </button>
+          </div>
+        </section>
 
         <div v-if="!myPosts.length" class="empty">아직 작성한 글이 없습니다.</div>
         <div v-else class="my-post-list">
