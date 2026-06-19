@@ -1261,7 +1261,14 @@ textarea:focus {
   justify-content: flex-end;
 }
 
-.post img {
+.post-images {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.post-images img {
+  width: 100%;
   max-width: 100%;
   max-height: 420px;
   object-fit: contain;
@@ -1276,19 +1283,11 @@ textarea:focus {
   border-top: 1px solid var(--border);
 }
 
-.comment-thread {
-  display: grid;
-  gap: 10px;
-}
-
 .comment {
   display: grid;
   grid-template-columns: 38px 1fr;
   gap: 10px;
   min-width: 0;
-}
-
-.comment-parent {
   padding: 12px;
   border-radius: 14px;
   background: var(--secondary);
@@ -1304,12 +1303,6 @@ textarea:focus {
   color: var(--primary);
   font-size: 13px;
   font-weight: 900;
-}
-
-.comment-avatar.small {
-  width: 32px;
-  height: 32px;
-  font-size: 12px;
 }
 
 .comment-body {
@@ -1331,59 +1324,6 @@ textarea:focus {
   margin-top: 8px;
   align-items: center;
   justify-content: flex-start;
-}
-
-.reply-action {
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--muted);
-  padding: 7px 10px;
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.reply-action:hover {
-  background: white;
-  color: var(--primary);
-}
-
-.reply-form {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.reply-list {
-  position: relative;
-  display: grid;
-  gap: 10px;
-  margin-left: 18px;
-  padding-left: 30px;
-}
-
-.reply-list::before {
-  content: "";
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 6px;
-  width: 2px;
-  border-radius: 999px;
-  background: var(--border);
-}
-
-.reply-comment {
-  grid-template-columns: 32px 1fr;
-  padding: 10px 0;
-}
-
-.reply-comment .comment-body {
-  padding: 10px 12px;
-  border-radius: 14px;
-  background: white;
-  border: 1px solid var(--border);
 }
 
 .account-page {
@@ -1555,12 +1495,12 @@ textarea:focus {
   -webkit-line-clamp: 2;
 }
 
-.my-post-card img {
-  max-width: 100%;
+.my-post-card .post-images {
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+}
+
+.my-post-card .post-images img {
   max-height: 190px;
-  object-fit: contain;
-  border: 1px solid var(--border);
-  border-radius: 12px;
 }
 
 .settings-card {

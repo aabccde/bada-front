@@ -57,7 +57,6 @@ type CommunityComment = {
   content: string
   createdAt: string
   author: string
-  children: CommunityComment[]
 }
 type Toast = {
   show: boolean
@@ -99,7 +98,6 @@ const postImageFiles = ref<File[]>([])
 const postImageInput = ref<HTMLInputElement | null>(null)
 const commentDrafts = reactive<Record<string, string>>({})
 const openPostId = ref<string | null>(null)
-const openReplyId = ref<string | null>(null)
 const favoriteIds = ref<Set<string>>(new Set())
 const favoriteSpots = ref<Spot[]>([])
 const headerQuery = ref('')
@@ -718,21 +716,30 @@ function loadCommunity() {
 function normalizeStoredPost(post: CommunityPost): CommunityPost {
   return {
     ...post,
-    comments: (post.comments ?? []).map(normalizeStoredComment),
-  }
-}
-
-function normalizeStoredComment(comment: CommunityComment): CommunityComment {
-  return {
-    ...comment,
-    children: (comment.children ?? []).map(normalizeStoredComment),
+    comments: post.comments ?? [],
   }
 }
 
 async function loadPosts(targetSpotId: string) {
   try {
     const posts = await postApi.list(targetSpotId)
-    const mapped = posts.map((post) => mapPost(post, targetSpotId))
+    const detailed = await Promise.allSettled(
+      posts.map(async (post) => {
+        const summary = mapPost(post, targetSpotId)
+        const detail = await postApi.detail(summary.id)
+        return { ...post, ...detail, spotId: detail.spotId ?? post.spotId ?? targetSpotId }
+      }),
+    )
+    const existingById = new Map(community.value.map((post) => [post.id, post]))
+    const mapped = posts.map((post, index) => {
+      const source = detailed[index].status === 'fulfilled' ? detailed[index].value : post
+      const mappedPost = mapPost(source, targetSpotId)
+      const existing = existingById.get(mappedPost.id)
+      return {
+        ...mappedPost,
+        comments: mappedPost.comments.length ? mappedPost.comments : existing?.comments ?? [],
+      }
+    })
     community.value = [
       ...community.value.filter((post) => post.spotId !== targetSpotId),
       ...mapped,
@@ -782,7 +789,6 @@ function syncFavoriteIds(spots: Spot[]) {
 
 async function togglePost(post: CommunityPost) {
   openPostId.value = openPostId.value === post.id ? null : post.id
-  openReplyId.value = null
   if (openPostId.value !== post.id || post.comments.length) return
   try {
     post.comments = (await postApi.comments(post.id)).map(mapComment)
@@ -791,11 +797,6 @@ async function togglePost(post: CommunityPost) {
   } catch (error) {
     apiState.error = apiErrorMessage(error)
   }
-}
-
-function toggleReplyForm(postId: string, commentId: string) {
-  const key = replyDraftKey(postId, commentId)
-  openReplyId.value = openReplyId.value === key ? null : key
 }
 
 function saveCommunity() {
@@ -863,7 +864,7 @@ async function submitComment(post: CommunityPost) {
   const draft = commentDrafts[post.id]?.trim()
   if (!draft) return
   try {
-    const created = await postApi.createComment(post.id, { content: draft.slice(0, 1000), parentCommentId: null })
+    const created = await postApi.createComment(post.id, { content: draft.slice(0, 1000) })
     post.comments.push(mapComment(created))
     apiState.error = ''
   } catch (error) {
@@ -873,36 +874,11 @@ async function submitComment(post: CommunityPost) {
       content: draft.slice(0, 1000),
       createdAt: new Date().toISOString(),
       author: user.name,
-      children: [],
     })
   }
   commentDrafts[post.id] = ''
   saveCommunity()
   showToast('댓글이 등록되었습니다.')
-}
-
-async function submitReply(post: CommunityPost, parent: CommunityComment) {
-  const draftKey = replyDraftKey(post.id, parent.id)
-  const draft = commentDrafts[draftKey]?.trim()
-  if (!draft) return
-  try {
-    const created = await postApi.createComment(post.id, { content: draft.slice(0, 1000), parentCommentId: parent.id })
-    parent.children.push(mapComment(created))
-    apiState.error = ''
-  } catch (error) {
-    apiState.error = apiErrorMessage(error)
-    parent.children.push({
-      id: crypto.randomUUID(),
-      content: draft.slice(0, 1000),
-      createdAt: new Date().toISOString(),
-      author: user.name,
-      children: [],
-    })
-  }
-  commentDrafts[draftKey] = ''
-  openReplyId.value = null
-  saveCommunity()
-  showToast('답글이 등록되었습니다.')
 }
 
 async function toggleLike(post: CommunityPost) {
@@ -966,19 +942,9 @@ async function deleteComment(post: CommunityPost, commentId: string) {
   } catch (error) {
     apiState.error = apiErrorMessage(error)
   }
-  post.comments = removeComment(post.comments, commentId)
+  post.comments = post.comments.filter((comment) => comment.id !== commentId)
   saveCommunity()
   showToast('댓글이 삭제되었습니다.')
-}
-
-function replyDraftKey(postId: string, commentId: string) {
-  return `${postId}:${commentId}:reply`
-}
-
-function removeComment(comments: CommunityComment[], commentId: string): CommunityComment[] {
-  return comments
-    .filter((comment) => comment.id !== commentId)
-    .map((comment) => ({ ...comment, children: removeComment(comment.children ?? [], commentId) }))
 }
 
 function onPostImages(event: Event) {
@@ -1010,7 +976,7 @@ async function toggleFavorite(spot: Spot) {
 }
 
 function mapPost(post: ApiPost, fallbackSpotId: string): CommunityPost {
-  const imageUrls = post.imageUrls ?? (post.imageUrl ? [post.imageUrl] : post.thumbnailUrl ? [post.thumbnailUrl] : [])
+  const imageUrls = normalizePostImageUrls(post)
   const writer = post.writer ?? post.user
   return {
     id: String(post.postId ?? post.id ?? crypto.randomUUID()),
@@ -1040,13 +1006,40 @@ function canManagePost(post: CommunityPost) {
   return post.author === user.name
 }
 
+function normalizePostImageUrls(post: ApiPost) {
+  const raw = post as Record<string, unknown>
+  const sources = [raw.imageUrls, raw.images, raw.postImages, raw.imageUrl, raw.thumbnailUrl]
+  const urls = sources.flatMap(extractImageUrls)
+  return [...new Set(urls)]
+}
+
+function extractImageUrls(value: unknown): string[] {
+  if (!value) return []
+  if (typeof value === 'string') {
+    const normalized = normalizeImageUrl(value)
+    return normalized ? [normalized] : []
+  }
+  if (Array.isArray(value)) return value.flatMap(extractImageUrls)
+  if (typeof value === 'object') {
+    const obj = value as Record<string, unknown>
+    return extractImageUrls(obj.imageUrl ?? obj.url ?? obj.path ?? obj.src)
+  }
+  return []
+}
+
+function normalizeImageUrl(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (/^(https?:|data:|blob:)/i.test(trimmed)) return trimmed
+  return new URL(trimmed, API_BASE_URL).href
+}
+
 function mapComment(comment: ApiComment): CommunityComment {
   return {
     id: String(comment.commentId ?? comment.id ?? crypto.randomUUID()),
     content: comment.content,
     createdAt: comment.createdAt ?? new Date().toISOString(),
     author: comment.author ?? comment.nickname ?? comment.writer?.nickname ?? comment.user?.nickname ?? '익명',
-    children: comment.children?.map(mapComment) ?? [],
   }
 }
 
@@ -1576,54 +1569,28 @@ function titleForPage() {
             </div>
           </div>
           <p>{{ post.content }}</p>
-          <img v-if="post.imageUrl" :src="post.imageUrl" alt="" />
+          <div v-if="post.imageUrls.length" class="post-images">
+            <img v-for="url in post.imageUrls" :key="url" :src="url" alt="" loading="lazy" />
+          </div>
           <button class="link-button" type="button" @click="togglePost(post)">{{ openPostId === post.id ? '댓글 숨기기' : '댓글 보기 / 작성' }}</button>
           <div v-if="openPostId === post.id" class="comments">
             <p v-if="!post.comments.length" class="muted">아직 댓글이 없습니다.</p>
-            <div v-for="comment in post.comments" :key="comment.id" class="comment-thread">
-              <div class="comment comment-parent">
-                <span class="comment-avatar">{{ comment.author.charAt(0).toUpperCase() }}</span>
-                <div class="comment-body">
-                  <div class="comment-meta"><strong>{{ comment.author }}</strong><span>{{ fmt(comment.createdAt) }}</span></div>
-                  <p>{{ comment.content }}</p>
-                  <div class="comment-actions">
-                    <button v-if="user.loggedIn" class="reply-action" type="button" @click="toggleReplyForm(post.id, comment.id)">답글</button>
-                    <button v-if="user.loggedIn && comment.author === user.name" class="icon-action edit-action" type="button" aria-label="댓글 수정" @click="editComment(comment)">
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M4 20h4.2L18.7 9.5a2 2 0 0 0 0-2.8l-1.4-1.4a2 2 0 0 0-2.8 0L4 15.8V20Zm11.9-13.3 1.4 1.4" />
-                      </svg>
-                    </button>
-                    <button v-if="user.loggedIn && comment.author === user.name" class="icon-action delete-action" type="button" aria-label="댓글 삭제" @click="deleteComment(post, comment.id)">
-                      <svg viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M5 7h14M10 11v6m4-6v6M9 7l1-3h4l1 3m-8 0 1 13h8l1-13" />
-                      </svg>
-                    </button>
-                  </div>
-                  <form v-if="openReplyId === replyDraftKey(post.id, comment.id)" class="reply-form" @submit.prevent="submitReply(post, comment)">
-                    <input v-model="commentDrafts[replyDraftKey(post.id, comment.id)]" maxlength="1000" :placeholder="`${comment.author}님에게 답글`" />
-                    <button class="btn primary small" type="submit">답글</button>
-                  </form>
-                </div>
-              </div>
-              <div v-if="comment.children.length" class="reply-list">
-                <div v-for="reply in comment.children" :key="reply.id" class="comment reply-comment">
-                  <span class="comment-avatar small">{{ reply.author.charAt(0).toUpperCase() }}</span>
-                  <div class="comment-body">
-                    <div class="comment-meta"><strong>{{ reply.author }}</strong><span>{{ fmt(reply.createdAt) }}</span></div>
-                    <p>{{ reply.content }}</p>
-                    <div v-if="user.loggedIn && reply.author === user.name" class="comment-actions">
-                      <button class="icon-action edit-action" type="button" aria-label="답글 수정" @click="editComment(reply)">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M4 20h4.2L18.7 9.5a2 2 0 0 0 0-2.8l-1.4-1.4a2 2 0 0 0-2.8 0L4 15.8V20Zm11.9-13.3 1.4 1.4" />
-                        </svg>
-                      </button>
-                      <button class="icon-action delete-action" type="button" aria-label="답글 삭제" @click="deleteComment(post, reply.id)">
-                        <svg viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M5 7h14M10 11v6m4-6v6M9 7l1-3h4l1 3m-8 0 1 13h8l1-13" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
+            <div v-for="comment in post.comments" :key="comment.id" class="comment">
+              <span class="comment-avatar">{{ comment.author.charAt(0).toUpperCase() }}</span>
+              <div class="comment-body">
+                <div class="comment-meta"><strong>{{ comment.author }}</strong><span>{{ fmt(comment.createdAt) }}</span></div>
+                <p>{{ comment.content }}</p>
+                <div v-if="user.loggedIn && comment.author === user.name" class="comment-actions">
+                  <button class="icon-action edit-action" type="button" aria-label="댓글 수정" @click="editComment(comment)">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M4 20h4.2L18.7 9.5a2 2 0 0 0 0-2.8l-1.4-1.4a2 2 0 0 0-2.8 0L4 15.8V20Zm11.9-13.3 1.4 1.4" />
+                    </svg>
+                  </button>
+                  <button class="icon-action delete-action" type="button" aria-label="댓글 삭제" @click="deleteComment(post, comment.id)">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M5 7h14M10 11v6m4-6v6M9 7l1-3h4l1 3m-8 0 1 13h8l1-13" />
+                    </svg>
+                  </button>
                 </div>
               </div>
             </div>
@@ -1708,7 +1675,9 @@ function titleForPage() {
             </div>
             <h2>{{ post.title }}</h2>
             <p>{{ post.content }}</p>
-            <img v-if="post.imageUrl" :src="post.imageUrl" alt="" />
+            <div v-if="post.imageUrls.length" class="post-images">
+              <img v-for="url in post.imageUrls" :key="url" :src="url" alt="" loading="lazy" />
+            </div>
           </button>
         </div>
       </section>

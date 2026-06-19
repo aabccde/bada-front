@@ -86,7 +86,6 @@ export interface ApiComment {
   nickname?: string;
   writer?: ApiUser & { writerId?: number | string };
   user?: ApiUser;
-  children?: ApiComment[];
 }
 
 const apiExperienceMap: Record<ExperienceKey, ApiExperience> = {
@@ -326,7 +325,7 @@ export const postApi = {
     const { data } = await apiClient.get(`/posts/${postId}/comments`);
     return extractList<ApiComment>(data);
   },
-  async createComment(postId: string, body: { content: string; parentCommentId?: string | null }) {
+  async createComment(postId: string, body: { content: string }) {
     const { data } = await apiClient.post(`/posts/${postId}/comments`, body);
     return unwrap<ApiComment>(data);
   },
