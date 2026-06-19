@@ -1488,6 +1488,10 @@ textarea:focus {
   max-width: 760px;
 }
 
+.activity-page {
+  max-width: 1180px;
+}
+
 .account-panel,
 .settings-card,
 .my-post-card {
@@ -1610,6 +1614,92 @@ textarea:focus {
   margin: 0 auto;
 }
 
+.activity-page .my-page {
+  width: 100%;
+}
+
+.activity-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.activity-panel {
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: white;
+  padding: 20px;
+}
+
+.activity-panel-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.activity-panel-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.activity-panel-head > strong {
+  min-width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--primary);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.favorites-panel {
+  position: sticky;
+  top: 88px;
+}
+
+.favorite-list {
+  display: grid;
+  gap: 6px;
+}
+
+.favorite-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 12px;
+  align-items: center;
+  border: 0;
+  border-radius: 13px;
+  background: transparent;
+  padding: 12px;
+  text-align: left;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.favorite-row:hover {
+  background: var(--secondary);
+  transform: translateX(2px);
+}
+
+.favorite-row > small {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.empty.compact {
+  padding: 36px 16px;
+  border-radius: 16px;
+}
+
 .my-post-list {
   display: grid;
   gap: 14px;
@@ -1617,8 +1707,11 @@ textarea:focus {
 
 .my-post-card {
   display: grid;
-  gap: 8px;
-  padding: 20px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  min-height: 112px;
+  padding: 14px;
   text-align: left;
   transition:
     border-color 160ms ease,
@@ -1632,16 +1725,33 @@ textarea:focus {
   box-shadow: 0 14px 30px rgba(15, 23, 42, 0.07);
 }
 
-.my-post-card > div {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
+.my-post-copy {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.my-post-copy > span {
   color: var(--primary);
   font-size: 12px;
   font-weight: 900;
 }
 
-.my-post-card small,
+.my-post-copy > small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+.my-post-copy h2 {
+  overflow: hidden;
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .my-post-card p {
   color: var(--muted);
 }
@@ -1649,16 +1759,39 @@ textarea:focus {
 .my-post-card p {
   display: -webkit-box;
   overflow: hidden;
+  margin: 0;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+  line-height: 1.5;
 }
 
-.my-post-card .post-images {
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+.my-post-thumb {
+  position: relative;
+  width: 112px;
+  height: 84px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--secondary);
 }
 
-.my-post-card .post-images img {
-  max-height: 190px;
+.my-post-thumb img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+}
+
+.my-post-thumb span {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: white;
+  padding: 3px 7px;
+  font-size: 11px;
+  font-weight: 900;
 }
 
 .settings-card {
@@ -1884,9 +2017,26 @@ textarea:focus {
   .region-panel {
     position: static;
   }
+
+  .activity-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .favorites-panel {
+    position: static;
+  }
 }
 
 @media (max-width: 620px) {
+  .my-post-card {
+    grid-template-columns: 1fr;
+  }
+
+  .my-post-thumb {
+    width: 100%;
+    height: 160px;
+  }
+
   .hero > div {
     padding: 28px;
   }

@@ -1705,7 +1705,7 @@ function titleForPage() {
       </section>
     </main>
 
-    <main v-else-if="page === 'me'" class="page account-page">
+    <main v-else-if="page === 'me'" class="page account-page activity-page">
       <section v-if="!user.loggedIn" class="account-panel auth-panel">
         <h1>로그인이 필요합니다</h1>
         <p>내가 작성한 커뮤니티 글을 확인하려면 로그인하세요.</p>
@@ -1718,34 +1718,49 @@ function titleForPage() {
           <p>작성한 커뮤니티 글과 즐겨찾기 스팟을 확인할 수 있습니다.</p>
         </header>
 
-        <section class="settings-card">
-          <h2>즐겨찾기 스팟</h2>
-          <div v-if="!favoriteSpots.length" class="empty">아직 즐겨찾기한 스팟이 없습니다.</div>
-          <div v-else class="my-post-list">
-            <button v-for="spot in favoriteSpots" :key="spot.id" class="my-post-card" type="button" @click="navigate(`/spot/${spot.id}`)">
+        <div class="activity-layout">
+          <section class="activity-panel favorites-panel">
+            <div class="activity-panel-head">
               <div>
-                <span>{{ EXPERIENCE_LABELS[spot.experience] }} · {{ spot.region }}</span>
-                <small>{{ spot.predcYmd || listDate }}</small>
+                <span class="side-title">Favorites</span>
+                <h2>즐겨찾기 스팟</h2>
               </div>
-              <h2>{{ spot.name }}</h2>
-              <p>종합 지수 {{ spot.totalIndex }}</p>
-            </button>
-          </div>
-        </section>
+              <strong>{{ favoriteSpots.length }}</strong>
+            </div>
+            <div v-if="!favoriteSpots.length" class="empty compact">아직 즐겨찾기한 스팟이 없습니다.</div>
+            <div v-else class="favorite-list">
+              <button v-for="spot in favoriteSpots" :key="spot.id" class="favorite-row" type="button" @click="navigate(`/spot/${spot.id}`)">
+                <span class="row-name"><small>{{ EXPERIENCE_LABELS[spot.experience] }} · {{ spot.region }}</small><strong>{{ spot.name }}</strong></span>
+                <span class="chip" :class="indexTone(spot.totalIndex).chip">{{ spot.totalIndex }}</span>
+                <small>{{ spot.predcYmd || listDate }}</small>
+              </button>
+            </div>
+          </section>
 
-        <div v-if="!myPosts.length" class="empty">아직 작성한 글이 없습니다.</div>
-        <div v-else class="my-post-list">
-          <button v-for="post in myPosts" :key="post.id" class="my-post-card" type="button" @click="navigate(`/spot/${post.spotId}`)">
-            <div>
-              <span>{{ getSpot(post.spotId) ? `${EXPERIENCE_LABELS[getSpot(post.spotId)!.experience]} · ${getSpot(post.spotId)!.name}` : post.spotId }}</span>
-              <small>{{ new Date(post.createdAt).toLocaleDateString('ko-KR') }}</small>
+          <section class="activity-panel posts-panel">
+            <div class="activity-panel-head">
+              <div>
+                <span class="side-title">Posts</span>
+                <h2>내 게시물</h2>
+              </div>
+              <strong>{{ myPosts.length }}</strong>
             </div>
-            <h2>{{ post.title }}</h2>
-            <p>{{ post.content }}</p>
-            <div v-if="post.imageUrls.length" class="post-images">
-              <img v-for="url in post.imageUrls" :key="url" :src="url" alt="" loading="lazy" />
+            <div v-if="!myPosts.length" class="empty compact">아직 작성한 글이 없습니다.</div>
+            <div v-else class="my-post-list">
+              <button v-for="post in myPosts" :key="post.id" class="my-post-card" type="button" @click="navigate(`/spot/${post.spotId}`)">
+                <div class="my-post-copy">
+                  <small>{{ new Date(post.createdAt).toLocaleDateString('ko-KR') }}</small>
+                  <h2>{{ post.title }}</h2>
+                  <span>{{ getSpot(post.spotId) ? `${EXPERIENCE_LABELS[getSpot(post.spotId)!.experience]} · ${getSpot(post.spotId)!.name}` : post.spotId }}</span>
+                  <p>{{ post.content }}</p>
+                </div>
+                <div v-if="post.imageUrls.length" class="my-post-thumb">
+                  <img :src="post.imageUrls[0]" alt="" loading="lazy" />
+                  <span v-if="post.imageUrls.length > 1">+{{ post.imageUrls.length - 1 }}</span>
+                </div>
+              </button>
             </div>
-          </button>
+          </section>
         </div>
       </section>
     </main>
