@@ -8,11 +8,13 @@ const props = withDefaults(
     spots: Spot[]
     height?: number
     focusId?: string
+    highlightId?: string
     navigateOnClick?: boolean
   }>(),
   {
     height: 380,
     focusId: undefined,
+    highlightId: undefined,
     navigateOnClick: true,
   },
 )
@@ -37,7 +39,7 @@ onBeforeUnmount(() => {
 })
 
 watch(
-  () => [props.spots, props.focusId] as const,
+  () => [props.spots, props.focusId, props.highlightId] as const,
   () => {
     renderMarkers()
   },
@@ -73,11 +75,12 @@ function renderMarkers() {
   const bounds: L.LatLngExpression[] = []
   for (const spot of props.spots) {
     const isFocus = spot.id === props.focusId
+    const isHighlight = spot.id === props.highlightId
     const size = isFocus ? 18 : 14
     const color = toneColor(spot.totalIndex)
     const icon = L.divIcon({
       className: 'marine-div-icon',
-      html: `<div style="width:${size}px;height:${size}px;border-radius:9999px;background:${color};border:3px solid white;box-shadow:0 2px 8px rgba(15,23,42,0.25);"></div>`,
+      html: `<div class="marine-marker${isHighlight ? ' highlighted' : ''}" style="--marker-color:${color};width:${size}px;height:${size}px;"></div>`,
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
     })

@@ -46,6 +46,7 @@ type CommunityPost = {
   imageUrls: string[]
   createdAt: string
   author: string
+  authorId?: string
   authorEmail?: string
   likeCount: number
   liked: boolean
@@ -56,6 +57,12 @@ type CommunityComment = {
   content: string
   createdAt: string
   author: string
+  children: CommunityComment[]
+}
+type Toast = {
+  show: boolean
+  message: string
+  tone: 'success' | 'error'
 }
 
 const VALID_EXP: ExperienceKey[] = ['travel', 'surfing', 'fishing', 'scuba', 'mudflat', 'swimming']
@@ -70,6 +77,7 @@ const allRegion = ref<string | undefined>()
 
 const homeExperience = ref<ExperienceKey>('travel')
 const homeSort = ref<SortKey>('index')
+const hoveredHomeSpotId = ref<string | undefined>()
 const selectedDate = ref(defaultDate())
 const listDate = ref(defaultDate())
 const geo = reactive<{ loc: { lat: number; lon: number } | null; loading: boolean; error: string | null }>({
@@ -78,6 +86,7 @@ const geo = reactive<{ loc: { lat: number; lon: number } | null; loading: boolea
   error: null,
 })
 const user = reactive({
+  id: '',
   loggedIn: false,
   name: 'Marine User',
   email: 'demo@marinepro.kr',
@@ -87,8 +96,10 @@ const user = reactive({
 const community = ref<CommunityPost[]>([])
 const postForm = reactive({ title: '', content: '', imageUrl: '' })
 const postImageFiles = ref<File[]>([])
+const postImageInput = ref<HTMLInputElement | null>(null)
 const commentDrafts = reactive<Record<string, string>>({})
 const openPostId = ref<string | null>(null)
+const openReplyId = ref<string | null>(null)
 const favoriteIds = ref<Set<string>>(new Set())
 const favoriteSpots = ref<Spot[]>([])
 const headerQuery = ref('')
@@ -97,6 +108,8 @@ const authMode = ref<'signin' | 'signup'>('signin')
 const authForm = reactive({ email: '', password: '', displayName: '' })
 const authMessage = ref('')
 const apiState = reactive({ loading: false, error: '' })
+const toast = reactive<Toast>({ show: false, message: '', tone: 'success' })
+let toastTimer: number | undefined
 const remoteSpots = reactive<Record<ExperienceKey, Spot[]>>({
   travel: [],
   surfing: [],
@@ -118,6 +131,7 @@ const settingsForm = reactive({
   displayName: '',
   newPassword: '',
   confirmPassword: '',
+  deletePassword: '',
   deleteText: '',
 })
 
@@ -169,7 +183,7 @@ const listDateLabel = computed(() => dateOptions.value.find((o) => o.value === l
 const currentSpot = computed(() => getSpot(spotId.value))
 const spotPosts = computed(() => community.value.filter((post) => post.spotId === spotId.value))
 const myPosts = computed(() =>
-  community.value.filter((post) => post.authorEmail === user.email || (!post.authorEmail && post.author === user.name)),
+  community.value.filter((post) => canManagePost(post)),
 )
 
 onMounted(() => {
@@ -289,6 +303,16 @@ function apiErrorMessage(error: unknown) {
     return String(obj.message ?? obj.error ?? `API 오류 (${anyError.response?.status ?? ''})`)
   }
   return anyError.message || 'API 요청에 실패했습니다.'
+}
+
+function showToast(message: string, tone: Toast['tone'] = 'success') {
+  toast.show = true
+  toast.message = message
+  toast.tone = tone
+  if (toastTimer) window.clearTimeout(toastTimer)
+  toastTimer = window.setTimeout(() => {
+    toast.show = false
+  }, 3000)
 }
 
 async function loadHomeData() {
@@ -657,7 +681,7 @@ function distanceLabel(spot: Spot) {
 function loadCommunity() {
   const raw = localStorage.getItem('marinepro-community')
   if (raw) {
-    community.value = JSON.parse(raw)
+    community.value = JSON.parse(raw).map(normalizeStoredPost)
     return
   }
   community.value = [
@@ -689,6 +713,20 @@ function loadCommunity() {
     },
   ]
   saveCommunity()
+}
+
+function normalizeStoredPost(post: CommunityPost): CommunityPost {
+  return {
+    ...post,
+    comments: (post.comments ?? []).map(normalizeStoredComment),
+  }
+}
+
+function normalizeStoredComment(comment: CommunityComment): CommunityComment {
+  return {
+    ...comment,
+    children: (comment.children ?? []).map(normalizeStoredComment),
+  }
 }
 
 async function loadPosts(targetSpotId: string) {
@@ -744,6 +782,7 @@ function syncFavoriteIds(spots: Spot[]) {
 
 async function togglePost(post: CommunityPost) {
   openPostId.value = openPostId.value === post.id ? null : post.id
+  openReplyId.value = null
   if (openPostId.value !== post.id || post.comments.length) return
   try {
     post.comments = (await postApi.comments(post.id)).map(mapComment)
@@ -752,6 +791,11 @@ async function togglePost(post: CommunityPost) {
   } catch (error) {
     apiState.error = apiErrorMessage(error)
   }
+}
+
+function toggleReplyForm(postId: string, commentId: string) {
+  const key = replyDraftKey(postId, commentId)
+  openReplyId.value = openReplyId.value === key ? null : key
 }
 
 function saveCommunity() {
@@ -797,25 +841,29 @@ async function submitPost() {
   postForm.content = ''
   postForm.imageUrl = ''
   postImageFiles.value = []
+  if (postImageInput.value) postImageInput.value.value = ''
   saveCommunity()
 }
 
 async function deletePost(id: string) {
+  let deleteFailed = false
   try {
     await postApi.delete(id)
     apiState.error = ''
   } catch (error) {
     apiState.error = apiErrorMessage(error)
+    deleteFailed = true
   }
   community.value = community.value.filter((post) => post.id !== id)
   saveCommunity()
+  showToast(deleteFailed ? `로컬에서 삭제했습니다. API 오류 · ${apiState.error}` : '게시글이 삭제되었습니다.', deleteFailed ? 'error' : 'success')
 }
 
 async function submitComment(post: CommunityPost) {
   const draft = commentDrafts[post.id]?.trim()
   if (!draft) return
   try {
-    const created = await postApi.createComment(post.id, { content: draft.slice(0, 1000) })
+    const created = await postApi.createComment(post.id, { content: draft.slice(0, 1000), parentCommentId: null })
     post.comments.push(mapComment(created))
     apiState.error = ''
   } catch (error) {
@@ -825,10 +873,36 @@ async function submitComment(post: CommunityPost) {
       content: draft.slice(0, 1000),
       createdAt: new Date().toISOString(),
       author: user.name,
+      children: [],
     })
   }
   commentDrafts[post.id] = ''
   saveCommunity()
+  showToast('댓글이 등록되었습니다.')
+}
+
+async function submitReply(post: CommunityPost, parent: CommunityComment) {
+  const draftKey = replyDraftKey(post.id, parent.id)
+  const draft = commentDrafts[draftKey]?.trim()
+  if (!draft) return
+  try {
+    const created = await postApi.createComment(post.id, { content: draft.slice(0, 1000), parentCommentId: parent.id })
+    parent.children.push(mapComment(created))
+    apiState.error = ''
+  } catch (error) {
+    apiState.error = apiErrorMessage(error)
+    parent.children.push({
+      id: crypto.randomUUID(),
+      content: draft.slice(0, 1000),
+      createdAt: new Date().toISOString(),
+      author: user.name,
+      children: [],
+    })
+  }
+  commentDrafts[draftKey] = ''
+  openReplyId.value = null
+  saveCommunity()
+  showToast('답글이 등록되었습니다.')
 }
 
 async function toggleLike(post: CommunityPost) {
@@ -843,10 +917,12 @@ async function toggleLike(post: CommunityPost) {
     if (wasLiked) await postApi.unlike(post.id)
     else await postApi.like(post.id)
     apiState.error = ''
+    showToast(wasLiked ? '좋아요를 취소했습니다.' : '좋아요를 눌렀습니다.')
   } catch (error) {
     post.liked = wasLiked
     post.likeCount += wasLiked ? 1 : -1
     apiState.error = apiErrorMessage(error)
+    showToast(apiErrorMessage(error), 'error')
   }
   saveCommunity()
 }
@@ -866,6 +942,7 @@ async function editPost(post: CommunityPost) {
     apiState.error = apiErrorMessage(error)
   }
   saveCommunity()
+  showToast('게시글이 수정되었습니다.')
 }
 
 async function editComment(comment: CommunityComment) {
@@ -879,6 +956,7 @@ async function editComment(comment: CommunityComment) {
     apiState.error = apiErrorMessage(error)
   }
   saveCommunity()
+  showToast('댓글이 수정되었습니다.')
 }
 
 async function deleteComment(post: CommunityPost, commentId: string) {
@@ -888,8 +966,19 @@ async function deleteComment(post: CommunityPost, commentId: string) {
   } catch (error) {
     apiState.error = apiErrorMessage(error)
   }
-  post.comments = post.comments.filter((comment) => comment.id !== commentId)
+  post.comments = removeComment(post.comments, commentId)
   saveCommunity()
+  showToast('댓글이 삭제되었습니다.')
+}
+
+function replyDraftKey(postId: string, commentId: string) {
+  return `${postId}:${commentId}:reply`
+}
+
+function removeComment(comments: CommunityComment[], commentId: string): CommunityComment[] {
+  return comments
+    .filter((comment) => comment.id !== commentId)
+    .map((comment) => ({ ...comment, children: removeComment(comment.children ?? [], commentId) }))
 }
 
 function onPostImages(event: Event) {
@@ -912,14 +1001,17 @@ async function toggleFavorite(spot: Spot) {
     else await spotApi.favorite(spot.id)
     await loadFavoriteSpots()
     apiState.error = ''
+    showToast(wasFavorite ? '즐겨찾기를 해제했습니다.' : '즐겨찾기에 추가했습니다.')
   } catch (error) {
     favoriteIds.value = new Set(wasFavorite ? [...next, spot.id] : [...next].filter((id) => id !== spot.id))
     apiState.error = apiErrorMessage(error)
+    showToast(apiErrorMessage(error), 'error')
   }
 }
 
 function mapPost(post: ApiPost, fallbackSpotId: string): CommunityPost {
   const imageUrls = post.imageUrls ?? (post.imageUrl ? [post.imageUrl] : post.thumbnailUrl ? [post.thumbnailUrl] : [])
+  const writer = post.writer ?? post.user
   return {
     id: String(post.postId ?? post.id ?? crypto.randomUUID()),
     spotId: String(post.spotId ?? fallbackSpotId),
@@ -928,12 +1020,24 @@ function mapPost(post: ApiPost, fallbackSpotId: string): CommunityPost {
     imageUrl: imageUrls[0] ?? null,
     imageUrls,
     createdAt: post.createdAt ?? new Date().toISOString(),
-    author: post.author ?? post.nickname ?? post.writer?.nickname ?? post.user?.nickname ?? '익명',
-    authorEmail: post.writer?.email ?? post.user?.email,
+    author: post.author ?? post.nickname ?? writer?.nickname ?? '익명',
+    authorId: post.writer?.writerId != null
+      ? String(post.writer.writerId)
+      : writer?.userId != null
+        ? String(writer.userId)
+        : undefined,
+    authorEmail: writer?.email,
     likeCount: post.likeCount ?? 0,
     liked: post.liked ?? false,
     comments: post.comments?.map(mapComment) ?? [],
   }
+}
+
+function canManagePost(post: CommunityPost) {
+  if (!user.loggedIn) return false
+  if (post.authorId && user.id) return post.authorId === user.id
+  if (post.authorEmail) return post.authorEmail === user.email
+  return post.author === user.name
 }
 
 function mapComment(comment: ApiComment): CommunityComment {
@@ -942,6 +1046,7 @@ function mapComment(comment: ApiComment): CommunityComment {
     content: comment.content,
     createdAt: comment.createdAt ?? new Date().toISOString(),
     author: comment.author ?? comment.nickname ?? comment.writer?.nickname ?? comment.user?.nickname ?? '익명',
+    children: comment.children?.map(mapComment) ?? [],
   }
 }
 
@@ -950,6 +1055,7 @@ function loadUser() {
   if (!raw) return
   try {
     const saved = JSON.parse(raw)
+    user.id = saved.id || ''
     user.loggedIn = !!saved.loggedIn
     user.name = saved.name || user.name
     user.email = saved.email || user.email
@@ -967,6 +1073,7 @@ function saveUser() {
 
 function applyUser(apiUser: ApiUser, accessToken?: string) {
   if (accessToken) setAccessToken(accessToken)
+  user.id = apiUser.userId != null ? String(apiUser.userId) : user.id
   user.loggedIn = true
   user.email = apiUser.email
   user.name = apiUser.nickname
@@ -1033,48 +1140,65 @@ async function saveProfile() {
     const updated = await userApi.updateMe({ nickname: name.slice(0, 40) })
     applyUser({ ...updated, email: updated.email ?? user.email, nickname: updated.nickname ?? name.slice(0, 40) })
     apiState.error = ''
+    showToast('닉네임이 성공적으로 변경되었습니다.')
     return
   } catch (error) {
     apiState.error = apiErrorMessage(error)
   }
   user.name = name.slice(0, 40)
   saveUser()
+  showToast('닉네임이 성공적으로 변경되었습니다.')
 }
 
 async function changePassword() {
-  if (settingsForm.newPassword.length < 6) return
-  if (settingsForm.newPassword !== settingsForm.confirmPassword) return
+  if (settingsForm.newPassword.length < 6) {
+    showToast('비밀번호는 6자 이상이어야 합니다.', 'error')
+    return
+  }
+  if (settingsForm.newPassword !== settingsForm.confirmPassword) {
+    showToast('비밀번호가 일치하지 않습니다.', 'error')
+    return
+  }
   try {
     await userApi.changePassword({
       newPassword: settingsForm.newPassword,
       newPasswordConfirm: settingsForm.confirmPassword,
     })
     apiState.error = ''
+    settingsForm.newPassword = ''
+    settingsForm.confirmPassword = ''
+    showToast('비밀번호가 성공적으로 변경되었습니다.')
   } catch (error) {
-    apiState.error = apiErrorMessage(error)
+    showToast(apiErrorMessage(error), 'error')
   }
-  settingsForm.newPassword = ''
-  settingsForm.confirmPassword = ''
 }
 
 async function deleteAccount() {
   if (settingsForm.deleteText.trim() !== '회원탈퇴') return
+  if (!settingsForm.deletePassword) {
+    showToast('회원 탈퇴를 위해 현재 비밀번호를 입력하세요.', 'error')
+    return
+  }
   try {
-    await userApi.deleteMe()
+    await userApi.deleteMe({ password: settingsForm.deletePassword })
     apiState.error = ''
   } catch (error) {
-    apiState.error = apiErrorMessage(error)
+    showToast(apiErrorMessage(error), 'error')
+    return
   }
   community.value = community.value.filter((post) => post.authorEmail !== user.email)
   saveCommunity()
   localStorage.removeItem('marinepro-user')
   clearAccessToken()
+  user.id = ''
   user.loggedIn = false
   user.name = 'Marine User'
   user.email = 'demo@marinepro.kr'
   user.avatarUrl = ''
   user.createdAt = ''
+  settingsForm.deletePassword = ''
   settingsForm.deleteText = ''
+  showToast('회원탈퇴가 완료되었습니다.')
   navigate('/')
 }
 
@@ -1131,6 +1255,12 @@ function titleForPage() {
 
 <template>
   <div class="app-shell">
+    <Transition name="toast">
+      <div v-if="toast.show" class="toast" :class="toast.tone" role="status" aria-live="polite">
+        {{ toast.message }}
+      </div>
+    </Transition>
+
     <nav class="site-header">
       <button class="brand" type="button" @click="navigate('/')">MARINEPRO.KR</button>
       <div class="nav-links">
@@ -1198,7 +1328,7 @@ function titleForPage() {
         </div>
         <div class="legend"><span class="good"></span>좋음 <span class="warn"></span>보통 <span class="bad"></span>나쁨</div>
       </section>
-      <LeafletMap :spots="homeMapSpots" :height="420" @navigate="(id) => navigate(`/spot/${id}`)" />
+      <LeafletMap :spots="homeMapSpots" :height="420" :highlight-id="hoveredHomeSpotId" @navigate="(id) => navigate(`/spot/${id}`)" />
 
       <section class="list-head">
         <div>
@@ -1218,7 +1348,16 @@ function titleForPage() {
       </section>
 
       <div class="spot-grid">
-        <article v-for="(spot, index) in homePreview" :key="spot.id" class="spot-card" :style="{ animationDelay: `${index * 60}ms` }">
+        <article
+          v-for="(spot, index) in homePreview"
+          :key="spot.id"
+          class="spot-card"
+          :style="{ animationDelay: `${index * 60}ms` }"
+          @mouseenter="hoveredHomeSpotId = spot.id"
+          @mouseleave="hoveredHomeSpotId = undefined"
+          @focusin="hoveredHomeSpotId = spot.id"
+          @focusout="hoveredHomeSpotId = undefined"
+        >
           <div class="spot-card-top">
             <div>
               <p class="meta">{{ spot.region }}<template v-if="spot.predcNoonSeCd"> · {{ spot.predcNoonSeCd }}</template></p>
@@ -1311,7 +1450,7 @@ function titleForPage() {
                     <span class="row-name"><small>{{ spot.region }}</small><strong>{{ spot.name }}</strong></span>
                     <span class="row-summary"><strong>{{ summary(spot).primary }}</strong><small>{{ summary(spot).secondary }}</small></span>
                     <span class="row-community">글 {{ counts[spot.id] ?? 0 }}<template v-if="allSort === 'distance' && geo.loc"> · {{ distanceLabel(spot) }}</template></span>
-                    <span class="meter"><small>{{ spot.totalIndex }}</small><i :style="{ width: `${INDEX_LEVEL[spot.totalIndex] * 20}%`, background: markerColor(spot.totalIndex) }"></i></span>
+                    <span class="meter"><small>{{ spot.totalIndex }}</small><i :style="{ background: markerColor(spot.totalIndex) }"></i></span>
                   </button>
                 </li>
               </ul>
@@ -1330,8 +1469,17 @@ function titleForPage() {
           <p>{{ currentSpot.lat.toFixed(4) }}°N · {{ currentSpot.lot.toFixed(4) }}°E · {{ currentSpot.predcYmd }}</p>
         </div>
         <div class="detail-actions">
-          <button class="btn outline" type="button" @click="toggleFavorite(currentSpot)">
-            {{ favoriteIds.has(currentSpot.id) ? '즐겨찾기 해제' : '즐겨찾기' }}
+          <button
+            class="icon-action favorite-action"
+            :class="{ active: favoriteIds.has(currentSpot.id) }"
+            type="button"
+            :aria-pressed="favoriteIds.has(currentSpot.id)"
+            :aria-label="favoriteIds.has(currentSpot.id) ? '즐겨찾기 해제' : '즐겨찾기'"
+            @click="toggleFavorite(currentSpot)"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="m12 2.8 2.9 5.9 6.5.9-4.7 4.6 1.1 6.5-5.8-3.1-5.8 3.1 1.1-6.5-4.7-4.6 6.5-.9L12 2.8Z" />
+            </svg>
           </button>
           <span class="big-chip" :class="indexTone(currentSpot.totalIndex).chip">{{ EXPERIENCE_LABELS[currentSpot.experience] }}지수 · {{ currentSpot.totalIndex }}</span>
         </div>
@@ -1364,8 +1512,21 @@ function titleForPage() {
         <form v-if="user.loggedIn" class="community-form" @submit.prevent="submitPost">
           <input v-model="postForm.title" maxlength="120" placeholder="제목" />
           <textarea v-model="postForm.content" maxlength="2000" rows="3" placeholder="내용을 입력하세요"></textarea>
-          <input v-model="postForm.imageUrl" placeholder="이미지 URL (선택)" />
-          <input type="file" accept="image/*" multiple @change="onPostImages" />
+          <label class="file-picker">
+            <input ref="postImageInput" class="visually-hidden" type="file" accept="image/*" multiple @change="onPostImages" />
+            <span class="file-picker-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24">
+                <path d="M19 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2Zm0 14.4-3.5-3.5a1.5 1.5 0 0 0-2.1 0L12 15.3 8.6 11.9a1.5 1.5 0 0 0-2.1 0L5 13.4V5h14v12.4ZM8.5 9A1.5 1.5 0 1 0 8.5 6a1.5 1.5 0 0 0 0 3Z" />
+              </svg>
+            </span>
+            <span>
+              <strong>{{ postImageFiles.length ? `${postImageFiles.length}개 파일 선택됨` : '사진 선택' }}</strong>
+              <small>이미지는 최대 5개까지 업로드할 수 있습니다.</small>
+            </span>
+          </label>
+          <div v-if="postImageFiles.length" class="selected-files">
+            <span v-for="file in postImageFiles" :key="`${file.name}-${file.size}`">{{ file.name }}</span>
+          </div>
           <button class="btn primary" type="submit">게시글 작성</button>
         </form>
         <div v-else class="login-callout">
@@ -1377,9 +1538,41 @@ function titleForPage() {
           <div class="post-head">
             <div><h3>{{ post.title }}</h3><p>{{ post.author }} · {{ fmt(post.createdAt) }}</p></div>
             <div class="post-actions">
-              <button type="button" @click="toggleLike(post)">{{ post.liked ? '좋아요 취소' : '좋아요' }} {{ post.likeCount }}</button>
-              <button v-if="user.loggedIn && post.authorEmail === user.email" type="button" @click="editPost(post)">수정</button>
-              <button v-if="user.loggedIn && post.authorEmail === user.email" type="button" @click="deletePost(post.id)">삭제</button>
+              <button
+                class="icon-action like-action"
+                :class="{ active: post.liked }"
+                type="button"
+                :aria-pressed="post.liked"
+                :aria-label="post.liked ? '좋아요 취소' : '좋아요'"
+                @click="toggleLike(post)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 21.3 10.7 20C5.4 15.2 2 12.1 2 8.2 2 5.1 4.4 2.7 7.5 2.7c1.7 0 3.4.8 4.5 2.1 1.1-1.3 2.8-2.1 4.5-2.1 3.1 0 5.5 2.4 5.5 5.5 0 3.9-3.4 7-8.7 11.8L12 21.3Z" />
+                </svg>
+                <span>{{ post.likeCount }}</span>
+              </button>
+              <button
+                v-if="canManagePost(post)"
+                class="icon-action edit-action"
+                type="button"
+                aria-label="게시글 수정"
+                @click="editPost(post)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M4 20h4.2L18.7 9.5a2 2 0 0 0 0-2.8l-1.4-1.4a2 2 0 0 0-2.8 0L4 15.8V20Zm11.9-13.3 1.4 1.4" />
+                </svg>
+              </button>
+              <button
+                v-if="canManagePost(post)"
+                class="icon-action delete-action"
+                type="button"
+                aria-label="게시글 삭제"
+                @click="deletePost(post.id)"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M5 7h14M10 11v6m4-6v6M9 7l1-3h4l1 3m-8 0 1 13h8l1-13" />
+                </svg>
+              </button>
             </div>
           </div>
           <p>{{ post.content }}</p>
@@ -1387,12 +1580,51 @@ function titleForPage() {
           <button class="link-button" type="button" @click="togglePost(post)">{{ openPostId === post.id ? '댓글 숨기기' : '댓글 보기 / 작성' }}</button>
           <div v-if="openPostId === post.id" class="comments">
             <p v-if="!post.comments.length" class="muted">아직 댓글이 없습니다.</p>
-            <div v-for="comment in post.comments" :key="comment.id" class="comment">
-              <strong>{{ comment.author }}</strong><span>{{ fmt(comment.createdAt) }}</span>
-              <p>{{ comment.content }}</p>
-              <div v-if="user.loggedIn && comment.author === user.name" class="comment-actions">
-                <button type="button" @click="editComment(comment)">수정</button>
-                <button type="button" @click="deleteComment(post, comment.id)">삭제</button>
+            <div v-for="comment in post.comments" :key="comment.id" class="comment-thread">
+              <div class="comment comment-parent">
+                <span class="comment-avatar">{{ comment.author.charAt(0).toUpperCase() }}</span>
+                <div class="comment-body">
+                  <div class="comment-meta"><strong>{{ comment.author }}</strong><span>{{ fmt(comment.createdAt) }}</span></div>
+                  <p>{{ comment.content }}</p>
+                  <div class="comment-actions">
+                    <button v-if="user.loggedIn" class="reply-action" type="button" @click="toggleReplyForm(post.id, comment.id)">답글</button>
+                    <button v-if="user.loggedIn && comment.author === user.name" class="icon-action edit-action" type="button" aria-label="댓글 수정" @click="editComment(comment)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M4 20h4.2L18.7 9.5a2 2 0 0 0 0-2.8l-1.4-1.4a2 2 0 0 0-2.8 0L4 15.8V20Zm11.9-13.3 1.4 1.4" />
+                      </svg>
+                    </button>
+                    <button v-if="user.loggedIn && comment.author === user.name" class="icon-action delete-action" type="button" aria-label="댓글 삭제" @click="deleteComment(post, comment.id)">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="M5 7h14M10 11v6m4-6v6M9 7l1-3h4l1 3m-8 0 1 13h8l1-13" />
+                      </svg>
+                    </button>
+                  </div>
+                  <form v-if="openReplyId === replyDraftKey(post.id, comment.id)" class="reply-form" @submit.prevent="submitReply(post, comment)">
+                    <input v-model="commentDrafts[replyDraftKey(post.id, comment.id)]" maxlength="1000" :placeholder="`${comment.author}님에게 답글`" />
+                    <button class="btn primary small" type="submit">답글</button>
+                  </form>
+                </div>
+              </div>
+              <div v-if="comment.children.length" class="reply-list">
+                <div v-for="reply in comment.children" :key="reply.id" class="comment reply-comment">
+                  <span class="comment-avatar small">{{ reply.author.charAt(0).toUpperCase() }}</span>
+                  <div class="comment-body">
+                    <div class="comment-meta"><strong>{{ reply.author }}</strong><span>{{ fmt(reply.createdAt) }}</span></div>
+                    <p>{{ reply.content }}</p>
+                    <div v-if="user.loggedIn && reply.author === user.name" class="comment-actions">
+                      <button class="icon-action edit-action" type="button" aria-label="답글 수정" @click="editComment(reply)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M4 20h4.2L18.7 9.5a2 2 0 0 0 0-2.8l-1.4-1.4a2 2 0 0 0-2.8 0L4 15.8V20Zm11.9-13.3 1.4 1.4" />
+                        </svg>
+                      </button>
+                      <button class="icon-action delete-action" type="button" aria-label="답글 삭제" @click="deleteComment(post, reply.id)">
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                          <path d="M5 7h14M10 11v6m4-6v6M9 7l1-3h4l1 3m-8 0 1 13h8l1-13" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <form v-if="user.loggedIn" @submit.prevent="submitComment(post)">
@@ -1549,10 +1781,14 @@ function titleForPage() {
           <h2>회원탈퇴</h2>
           <p>탈퇴 시 작성하신 글, 댓글, 프로필 이미지를 포함한 모든 데이터가 삭제되며 복구할 수 없습니다.</p>
           <label class="delete-confirm">
+            <span>현재 비밀번호</span>
+            <input v-model="settingsForm.deletePassword" type="password" autocomplete="current-password" placeholder="현재 비밀번호" />
+          </label>
+          <label class="delete-confirm">
             <span>계속하려면 “회원탈퇴”를 입력하세요.</span>
             <input v-model="settingsForm.deleteText" placeholder="회원탈퇴" />
           </label>
-          <button class="btn danger" type="button" :disabled="settingsForm.deleteText.trim() !== '회원탈퇴'" @click="deleteAccount">탈퇴하기</button>
+          <button class="btn danger" type="button" :disabled="!settingsForm.deletePassword || settingsForm.deleteText.trim() !== '회원탈퇴'" @click="deleteAccount">탈퇴하기</button>
         </section>
       </section>
     </main>

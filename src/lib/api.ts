@@ -251,8 +251,8 @@ export const userApi = {
     const { data } = await apiClient.get("/users/me/favorite-spots", { params: { page: 1, pageSize: 50, targetDate } });
     return extractList<Record<string, unknown>>(data);
   },
-  async deleteMe() {
-    await apiClient.delete("/users/me");
+  async deleteMe(body: { password: string }) {
+    await apiClient.delete("/users/me", { data: body });
     clearAccessToken();
   },
 };
@@ -326,7 +326,7 @@ export const postApi = {
     const { data } = await apiClient.get(`/posts/${postId}/comments`);
     return extractList<ApiComment>(data);
   },
-  async createComment(postId: string, body: { content: string }) {
+  async createComment(postId: string, body: { content: string; parentCommentId?: string | null }) {
     const { data } = await apiClient.post(`/posts/${postId}/comments`, body);
     return unwrap<ApiComment>(data);
   },
