@@ -1602,7 +1602,9 @@ textarea:focus {
 
 .account-info dd {
   margin: 0;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--foreground);
+  font-family: inherit;
+  font-weight: 900;
 }
 
 .danger-card {
