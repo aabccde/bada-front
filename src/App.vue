@@ -834,7 +834,17 @@ async function submitPost() {
   }
   try {
     const created = await postApi.create(currentSpot.value.id, draft)
-    community.value.unshift(mapPost(created, currentSpot.value.id))
+    community.value.unshift(mapPost({
+      ...draft,
+      ...created,
+      spotId: created.spotId ?? currentSpot.value.id,
+      writer: created.writer ?? {
+        userId: user.id,
+        email: user.email,
+        nickname: user.name,
+        profileImageUrl: user.avatarUrl,
+      },
+    }, currentSpot.value.id))
     apiState.error = ''
   } catch (error) {
     apiState.error = apiErrorMessage(error)
