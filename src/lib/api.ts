@@ -5,6 +5,7 @@ export const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 
 const ACCESS_TOKEN_KEY = "badamoyeo-access-token";
+let refreshPromise: Promise<AuthResponse> | null = null;
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
@@ -16,7 +17,8 @@ export const apiClient = axios.create({
 
 apiClient.interceptors.request.use((config) => {
   const token = getAccessToken();
-  if (token) config.headers.Authorization = `Bearer ${token}`;
+  const url = String(config.url ?? "");
+  if (token && !url.includes("/auth/")) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
@@ -27,8 +29,12 @@ apiClient.interceptors.response.use(
     if (error.response?.status === 401 && original && !original.__retried && !original.url?.includes("/auth/refresh")) {
       original.__retried = true;
       try {
-        const refreshed = await authApi.refresh();
+        refreshPromise ??= authApi.refresh().finally(() => {
+          refreshPromise = null;
+        });
+        const refreshed = await refreshPromise;
         setAccessToken(refreshed.accessToken);
+        original.headers ??= {};
         original.headers.Authorization = `Bearer ${refreshed.accessToken}`;
         return apiClient(original);
       } catch {
