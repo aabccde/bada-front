@@ -208,6 +208,10 @@ watch([allExp, listDate, allSort], () => {
   void loadAllData()
 })
 
+watch(page, (current, previous) => {
+  if (current === 'all' && previous !== 'all') void loadAllData()
+})
+
 watch(
   () => geo.loc,
   () => {
