@@ -101,6 +101,7 @@ const postImageInput = ref<HTMLInputElement | null>(null)
 const commentDrafts = reactive<Record<string, string>>({})
 const openPostId = ref<string | null>(null)
 const selectedImageUrl = ref('')
+const postImageSlides = reactive<Record<string, number>>({})
 const favoriteIds = ref<Set<string>>(new Set())
 const favoriteSpots = ref<Spot[]>([])
 const headerQuery = ref('')
@@ -332,6 +333,16 @@ function openImageModal(url: string) {
 
 function closeImageModal() {
   selectedImageUrl.value = ''
+}
+
+function postImageStart(post: CommunityPost) {
+  return Math.min(postImageSlides[post.id] ?? 0, Math.max(post.imageUrls.length - 2, 0))
+}
+
+function slidePostImages(post: CommunityPost, direction: -1 | 1) {
+  const maxStart = Math.max(post.imageUrls.length - 2, 0)
+  const next = postImageStart(post) + direction
+  postImageSlides[post.id] = Math.min(Math.max(next, 0), maxStart)
 }
 
 async function loadHomeData() {
@@ -1662,10 +1673,40 @@ function titleForPage() {
             </div>
           </div>
           <p>{{ post.content }}</p>
-          <div v-if="post.imageUrls.length" class="post-images" :class="`count-${Math.min(post.imageUrls.length, 4)}`">
-            <button v-for="url in post.imageUrls" :key="url" class="post-image-button" type="button" aria-label="이미지 크게 보기" @click="openImageModal(url)">
-              <img :src="url" alt="" loading="lazy" />
+          <div
+            v-if="post.imageUrls.length"
+            class="post-image-carousel"
+            :class="{ peek: post.imageUrls.length > 2 }"
+            :style="{ '--slide-index': postImageStart(post) }"
+          >
+            <button
+              v-if="post.imageUrls.length > 2"
+              class="image-slide-button prev"
+              type="button"
+              aria-label="이전 이미지"
+              :disabled="postImageStart(post) === 0"
+              @click="slidePostImages(post, -1)"
+            >
+              ‹
             </button>
+            <div class="post-images" :class="{ single: post.imageUrls.length === 1 }">
+              <button v-for="url in post.imageUrls" :key="url" class="post-image-button" type="button" aria-label="이미지 크게 보기" @click="openImageModal(url)">
+                <img :src="url" alt="" loading="lazy" />
+              </button>
+            </div>
+            <button
+              v-if="post.imageUrls.length > 2"
+              class="image-slide-button next"
+              type="button"
+              aria-label="다음 이미지"
+              :disabled="postImageStart(post) >= post.imageUrls.length - 2"
+              @click="slidePostImages(post, 1)"
+            >
+              ›
+            </button>
+            <span v-if="post.imageUrls.length > 2" class="image-slide-count">
+              {{ postImageStart(post) + 1 }}-{{ Math.min(postImageStart(post) + 2, post.imageUrls.length) }} / {{ post.imageUrls.length }}
+            </span>
           </div>
           <button class="comment-toggle" type="button" @click="togglePost(post)">
             {{ openPostId === post.id ? '댓글 숨기기' : `댓글 보기 (${post.commentCount})` }}

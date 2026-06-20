@@ -1443,22 +1443,47 @@ textarea:focus {
   justify-content: flex-end;
 }
 
-.post-images {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
+.post-image-carousel {
+  position: relative;
   max-width: 760px;
   overflow: hidden;
   border-radius: 10px;
+  --slide-gap: 8px;
+  --slide-width: calc((100% - (var(--slide-gap) * 2)) / 2.35);
+}
+
+.post-images {
+  display: flex;
+  gap: var(--slide-gap);
+  transition: transform 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.post-image-carousel.peek .post-images {
+  transform: translateX(calc(var(--slide-index) * -1 * (var(--slide-width) + var(--slide-gap))));
+}
+
+.post-images.single {
+  max-width: 640px;
 }
 
 .post-image-button {
+  flex: 1 1 0;
+  min-width: 0;
   padding: 0;
   border: 0;
   border-radius: 10px;
   background: transparent;
   cursor: zoom-in;
   overflow: hidden;
+}
+
+.post-image-carousel.peek .post-image-button {
+  flex: 0 0 var(--slide-width);
+}
+
+.post-images.single .post-image-button {
+  flex-basis: 100%;
 }
 
 .post-image-button:focus-visible {
@@ -1481,17 +1506,70 @@ textarea:focus {
   transform: scale(1.02);
 }
 
-.post-images.count-1 {
-  grid-template-columns: minmax(0, 1fr);
-  max-width: 640px;
-}
-
-.post-images.count-1 img {
+.post-images.single img {
   aspect-ratio: 16 / 9;
 }
 
-.post-images.count-3 {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.image-slide-button {
+  position: absolute;
+  top: 50%;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.68);
+  color: white;
+  font-size: 0;
+  line-height: 0;
+  cursor: pointer;
+  transform: translateY(-50%);
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.22);
+}
+
+.image-slide-button::before {
+  content: "";
+  position: absolute;
+  top: calc(50% + 1px);
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  border: solid currentColor;
+  border-width: 0 2px 2px 0;
+  transform-origin: center;
+}
+
+.image-slide-button.prev {
+  left: 10px;
+}
+
+.image-slide-button.prev::before {
+  transform: translate(-40%, -50%) rotate(135deg);
+}
+
+.image-slide-button.next {
+  right: 10px;
+}
+
+.image-slide-button.next::before {
+  transform: translate(-60%, -50%) rotate(-45deg);
+}
+
+.image-slide-button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.image-slide-count {
+  position: absolute;
+  right: 10px;
+  bottom: 10px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  background: rgba(15, 23, 42, 0.72);
+  color: white;
+  font-size: 12px;
+  font-weight: 900;
 }
 
 .comment-toggle {
@@ -2109,13 +2187,8 @@ textarea:focus {
 }
 
 @media (max-width: 620px) {
-  .post-images,
-  .post-images.count-3 {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .post-images.count-1 {
-    grid-template-columns: minmax(0, 1fr);
+  .post-image-carousel {
+    --slide-width: calc((100% - var(--slide-gap)) / 1.35);
   }
 
   .my-post-card {
