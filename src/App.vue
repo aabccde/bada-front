@@ -1648,7 +1648,7 @@ function titleForPage() {
             </div>
           </div>
           <p>{{ post.content }}</p>
-          <div v-if="post.imageUrls.length" class="post-images">
+          <div v-if="post.imageUrls.length" class="post-images" :class="`count-${Math.min(post.imageUrls.length, 4)}`">
             <img v-for="url in post.imageUrls" :key="url" :src="url" alt="" loading="lazy" />
           </div>
           <button class="comment-toggle" type="button" @click="togglePost(post)">

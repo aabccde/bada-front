@@ -1411,17 +1411,34 @@ textarea:focus {
 
 .post-images {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-width: 760px;
+  overflow: hidden;
+  border-radius: 10px;
 }
 
 .post-images img {
   width: 100%;
-  max-width: 100%;
-  max-height: 420px;
-  object-fit: contain;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: 10px;
+  background: #f8fafc;
+  display: block;
+}
+
+.post-images.count-1 {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 640px;
+}
+
+.post-images.count-1 img {
+  aspect-ratio: 16 / 9;
+}
+
+.post-images.count-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .comment-toggle {
@@ -2039,6 +2056,15 @@ textarea:focus {
 }
 
 @media (max-width: 620px) {
+  .post-images,
+  .post-images.count-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .post-images.count-1 {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .my-post-card {
     grid-template-columns: 1fr;
   }
