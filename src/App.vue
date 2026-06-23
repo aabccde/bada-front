@@ -116,6 +116,7 @@ const authMessage = ref('')
 const apiState = reactive({ loading: false, error: '' })
 const toast = reactive<Toast>({ show: false, message: '', tone: 'success' })
 let toastTimer: number | undefined
+let homeLoadToken = 0
 const remoteSpots = reactive<Record<ExperienceKey, Spot[]>>({
   travel: [],
   surfing: [],
@@ -205,7 +206,7 @@ onMounted(() => {
   window.addEventListener('popstate', applyRoute)
   void initializeSession()
   void loadHomeData()
-  void loadAllData()
+  if (page.value === 'all') void loadAllData()
 })
 
 watch([page, spotId, allExp, allSort, allQuery, allRegion], () => {
@@ -356,28 +357,36 @@ function slidePostImages(post: CommunityPost, direction: -1 | 1) {
 }
 
 async function loadHomeData() {
+  const token = ++homeLoadToken
+  const exp = homeExperience.value
+  const targetDate = selectedDate.value
+  const sort = homeSort.value
+  const timeSlot = selectedHomeTimeSlot.value
   apiState.loading = true
   try {
-    const timeSlot = selectedHomeTimeSlot.value
     const [cards, markers] = await Promise.all([
-      spotApi.dashboard(homeExperience.value, selectedDate.value, homeSort.value, 6, geo.loc),
-      spotApi.markers(homeExperience.value, selectedDate.value, timeSlot),
+      spotApi.dashboard(exp, targetDate, sort, 6, geo.loc),
+      spotApi.markers(exp, targetDate, timeSlot),
     ])
+    if (token !== homeLoadToken) return
     if (cards.length) {
-      homeCards[homeExperience.value] = await normalizeSpotRows(cards, homeExperience.value, selectedDate.value, timeSlot)
-      syncFavoriteIds(homeCards[homeExperience.value])
+      homeCards[exp] = await normalizeSpotRows(cards, exp, targetDate, timeSlot)
+      if (token !== homeLoadToken) return
+      syncFavoriteIds(homeCards[exp])
     }
     if (markers.length) {
-      remoteSpots[homeExperience.value] = markers.map((row) => normalizeSpot(row, fallbackFor(row, homeExperience.value), timeSlot))
-    } else if (!remoteSpots[homeExperience.value].length) {
-      const rows = await spotApi.list(homeExperience.value, selectedDate.value, homeSort.value, '', geo.loc)
-      if (rows.length) remoteSpots[homeExperience.value] = rows.map((row) => normalizeSpot(row, fallbackFor(row, homeExperience.value)))
+      remoteSpots[exp] = markers.map((row) => normalizeSpot(row, fallbackFor(row, exp), timeSlot))
+    } else if (!remoteSpots[exp].length) {
+      const rows = await spotApi.list(exp, targetDate, sort, '', geo.loc)
+      if (token !== homeLoadToken) return
+      if (rows.length) remoteSpots[exp] = rows.map((row) => normalizeSpot(row, fallbackFor(row, exp), timeSlot))
     }
     apiState.error = ''
   } catch (error) {
+    if (token !== homeLoadToken) return
     apiState.error = apiErrorMessage(error)
   } finally {
-    apiState.loading = false
+    if (token === homeLoadToken) apiState.loading = false
   }
 }
 
