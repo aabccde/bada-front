@@ -720,6 +720,29 @@ function detailFields(spot: Spot) {
   }
 }
 
+const FIELD_HELP: Record<string, string> = {
+  '물때': '조석 변화에 따른 바다 상태입니다. 소조기는 물 흐름이 비교적 약하고, 대조기는 차이가 큽니다.',
+  '날씨': '해당 예보 시점의 하늘 상태입니다.',
+  '기온': '예보 지점 주변 공기의 온도입니다.',
+  '수온': '해당 해역의 바닷물 온도입니다.',
+  '파고': '파도의 평균적인 높이입니다. 숫자가 높을수록 물결이 거칩니다.',
+  '풍속': '바람의 빠르기입니다. 강할수록 체감 조건과 파도에 영향을 줍니다.',
+  '유속': '바닷물이 흐르는 속도입니다. kn은 노트 단위이며 수영, 낚시, 다이빙 난이도에 영향을 줍니다.',
+  '시간대': '예보가 적용되는 오전 또는 오후 구분입니다.',
+  '개장 여부': '해수욕장 운영 상태입니다.',
+  '최고 파고': '예보 구간에서 예상되는 가장 높은 파도 높이입니다.',
+  '최고 풍속': '예보 구간에서 예상되는 가장 강한 바람 속도입니다.',
+  '대상어': '해당 낚시 포인트에서 주로 노릴 수 있는 어종입니다.',
+  '체험 시작': '갯벌 체험이 가능한 시작 시각입니다.',
+  '체험 종료': '갯벌 체험을 마쳐야 하는 종료 시각입니다.',
+  '권장 등급': '파도와 바람 조건을 기준으로 추천되는 서핑 숙련도입니다.',
+  '파주기': '파도와 파도 사이의 시간 간격입니다. 길수록 파도가 안정적으로 들어오는 편입니다.',
+}
+
+function fieldHelp(label: string) {
+  return FIELD_HELP[label] ?? `${label} 정보입니다.`
+}
+
 function markerColor(label: IndexLabel) {
   const level = INDEX_LEVEL[label]
   if (level >= 4) return '#3b82f6'
@@ -1618,7 +1641,17 @@ function titleForPage() {
       </section>
       <section class="field-grid">
         <div v-for="[label, value] in detailFields(currentSpot)" :key="label">
-          <span>{{ label }}</span><strong>{{ value }}</strong>
+          <span class="field-label">
+            {{ label }}
+            <button class="help-tip" type="button" :aria-label="`${label} 설명`">
+              <svg viewBox="0 0 16 16" aria-hidden="true">
+                <path d="M6.1 5.8C6.1 4.7 6.9 4 8.1 4c1.1 0 1.9.6 1.9 1.6 0 .8-.4 1.2-1.2 1.8-.7.5-.9.8-.9 1.5" />
+                <path d="M8 11.5h.01" />
+              </svg>
+              <span role="tooltip">{{ fieldHelp(label) }}</span>
+            </button>
+          </span>
+          <strong>{{ value }}</strong>
         </div>
       </section>
       <section class="analysis">

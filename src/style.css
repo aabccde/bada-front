@@ -1303,6 +1303,87 @@ textarea:focus {
   background: white;
 }
 
+.field-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.help-tip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  background: #f8fafc;
+  color: var(--muted);
+  cursor: help;
+}
+
+.help-tip svg {
+  width: 11px;
+  height: 11px;
+  display: block;
+  flex: 0 0 auto;
+  overflow: visible;
+}
+
+.help-tip svg path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.help-tip span {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 20;
+  width: max-content;
+  max-width: 220px;
+  padding: 9px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 10px;
+  background: #0f172a;
+  color: white;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  line-height: 1.45;
+  text-align: left;
+  white-space: normal;
+  box-shadow: 0 14px 30px rgba(15, 23, 42, 0.18);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition:
+    opacity 140ms ease,
+    transform 140ms ease;
+}
+
+.help-tip span::after {
+  content: '';
+  position: absolute;
+  left: 8px;
+  top: 100%;
+  width: 8px;
+  height: 8px;
+  background: #0f172a;
+  transform: translateY(-4px) rotate(45deg);
+}
+
+.help-tip:hover span,
+.help-tip:focus-visible span {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .field-grid strong {
   display: block;
   margin-top: 8px;
