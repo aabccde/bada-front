@@ -3,8 +3,6 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import { INDEX_LEVEL, type IndexLabel, type Spot } from '../lib/marine-data'
 
-type WeatherLayer = 'base' | 'radar' | 'wind'
-
 const props = withDefaults(
   defineProps<{
     spots: Spot[]
@@ -28,7 +26,8 @@ const emit = defineEmits<{
 }>()
 
 const container = ref<HTMLDivElement | null>(null)
-const activeWeatherLayer = ref<WeatherLayer>('base')
+const radarActive = ref(false)
+const windActive = ref(false)
 const radarLoading = ref(false)
 const radarUnavailable = ref(false)
 const windUnavailable = ref(false)
@@ -80,26 +79,44 @@ function createMap() {
   markerLayer = L.layerGroup().addTo(map)
 }
 
-async function setWeatherLayer(layer: WeatherLayer) {
-  if (!map || activeWeatherLayer.value === layer) return
-
-  if (layer === 'radar') {
-    await ensureRadarLayer()
-    if (!radarLayer) return
-  }
-
-  if (layer === 'wind') {
-    ensureWindLayer()
-    if (!windLayer) return
-  }
-
+function showBaseLayer() {
+  if (!map) return
   radarLayer?.remove()
   windLayer?.remove()
+  radarActive.value = false
+  windActive.value = false
+}
 
-  if (layer === 'radar') radarLayer?.addTo(map)
-  if (layer === 'wind') windLayer?.addTo(map)
+async function toggleRadarLayer() {
+  if (!map || radarLoading.value || radarUnavailable.value) return
 
-  activeWeatherLayer.value = layer
+  if (radarActive.value) {
+    radarLayer?.remove()
+    radarActive.value = false
+    return
+  }
+
+  await ensureRadarLayer()
+  if (!radarLayer) return
+
+  radarLayer.addTo(map)
+  radarActive.value = true
+}
+
+function toggleWindLayer() {
+  if (!map || !windApiKey || windUnavailable.value) return
+
+  if (windActive.value) {
+    windLayer?.remove()
+    windActive.value = false
+    return
+  }
+
+  ensureWindLayer()
+  if (!windLayer) return
+
+  windLayer.addTo(map)
+  windActive.value = true
 }
 
 async function ensureRadarLayer() {
@@ -145,7 +162,7 @@ function ensureWindLayer() {
   windLayer.on('tileerror', () => {
     windUnavailable.value = true
     windLayer?.remove()
-    if (activeWeatherLayer.value === 'wind') activeWeatherLayer.value = 'base'
+    windActive.value = false
   })
 }
 
@@ -220,25 +237,25 @@ function escapeHtml(value: string) {
     <div v-if="weatherControls" class="map-layer-control" aria-label="Weather map layers">
       <button
         type="button"
-        :class="{ active: activeWeatherLayer === 'base' }"
-        @click="setWeatherLayer('base')"
+        :class="{ active: !radarActive && !windActive }"
+        @click="showBaseLayer"
       >
         기본
       </button>
       <button
         type="button"
-        :class="{ active: activeWeatherLayer === 'radar' }"
+        :class="{ active: radarActive }"
         :disabled="radarLoading || radarUnavailable"
-        @click="setWeatherLayer('radar')"
+        @click="toggleRadarLayer"
       >
         {{ radarLoading ? '로딩 중' : radarUnavailable ? '레이더 오류' : '레이더' }}
       </button>
       <button
         type="button"
-        :class="{ active: activeWeatherLayer === 'wind' }"
+        :class="{ active: windActive }"
         :disabled="!windApiKey || windUnavailable"
         :title="windApiKey ? '바람 레이어 보기' : 'VITE_OPENWEATHER_API_KEY를 설정하면 바람 레이어를 볼 수 있습니다'"
-        @click="setWeatherLayer('wind')"
+        @click="toggleWindLayer"
       >
         {{ !windApiKey ? '바람 키 필요' : windUnavailable ? '바람 오류' : '바람' }}
       </button>
