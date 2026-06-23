@@ -136,8 +136,9 @@ function ensureWindLayer() {
 
   windLayer = L.tileLayer(`https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${windApiKey}`, {
     attribution: '&copy; <a href="https://openweathermap.org/">OpenWeather</a>',
+    className: 'wind-weather-layer',
     maxZoom: 19,
-    opacity: 0.42,
+    opacity: 0.56,
     zIndex: 310,
   })
 

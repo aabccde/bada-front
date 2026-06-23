@@ -709,6 +709,10 @@ textarea:focus {
   font-size: 10px;
 }
 
+.leaflet-map .wind-weather-layer {
+  filter: hue-rotate(92deg) saturate(1.85) contrast(1.18) brightness(1.05);
+}
+
 .marine-div-icon {
   background: transparent;
   border: 0;
