@@ -1571,7 +1571,18 @@ function titleForPage() {
                     <span class="row-name"><small>{{ spot.region }}</small><strong>{{ spot.name }}</strong></span>
                     <span class="row-summary"><strong>{{ summary(spot).primary }}</strong><small>{{ summary(spot).secondary }}</small></span>
                     <span class="row-community">글 {{ counts[spot.id] ?? 0 }}<template v-if="allSort === 'distance' && geo.loc"> · {{ distanceLabel(spot) }}</template></span>
-                    <span class="meter"><small>{{ spot.totalIndex }}</small><i :style="{ background: markerColor(spot.totalIndex) }"></i></span>
+                    <span class="meter" :aria-label="`지수 ${spot.totalIndex}, ${INDEX_LEVEL[spot.totalIndex]}단계`">
+                      <small>{{ spot.totalIndex }}</small>
+                      <span class="meter-bars" aria-hidden="true">
+                        <i
+                          v-for="step in 5"
+                          :key="step"
+                          class="meter-segment"
+                          :class="{ active: step <= INDEX_LEVEL[spot.totalIndex] }"
+                          :style="step <= INDEX_LEVEL[spot.totalIndex] ? { background: markerColor(spot.totalIndex) } : undefined"
+                        ></i>
+                      </span>
+                    </span>
                   </button>
                 </li>
               </ul>

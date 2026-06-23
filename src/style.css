@@ -1137,12 +1137,25 @@ textarea:focus {
   justify-items: end;
 }
 
-.meter i {
+.meter-bars {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 4px;
+  width: 92px;
+}
+
+.meter-segment {
   display: block;
-  width: 90px;
   height: 6px;
-  max-width: 90px;
   border-radius: 999px;
+  background: #e2e8f0;
+  transition:
+    background-color 160ms ease,
+    transform 160ms ease;
+}
+
+.spot-rows button:hover .meter-segment.active {
+  transform: translateY(-1px);
 }
 
 .detail-page {
