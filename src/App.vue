@@ -12,7 +12,7 @@ import {
   type IndexLabel,
   type Spot,
 } from './lib/marine-data'
-import { defaultDate, getDateOptions } from './lib/date-utils'
+import { defaultDate, getDateOptions, toYmd } from './lib/date-utils'
 import {
   SORT_LABELS,
   filterByQuery,
@@ -163,6 +163,12 @@ const homeSorted = computed(() => sortSpots(homeCardSpots.value, homeSort.value,
 const homeMapSpots = computed(() => sortSpots(homeSpots.value, homeSort.value, { counts: counts.value, userLoc: geo.loc }))
 const homePreview = computed(() => homeSorted.value.slice(0, 6))
 const homeDateLabel = computed(() => dateOptions.value.find((o) => o.value === selectedDate.value)?.label ?? selectedDate.value)
+const homeTimeSlotSelectable = computed(() => {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() + 3)
+  return selectedDate.value < toYmd(cutoff)
+})
+const selectedHomeTimeSlot = computed(() => (homeTimeSlotSelectable.value ? homeTimeSlot.value : undefined))
 
 const allSpots = computed(() => spotsFor(allExp.value))
 const regions = computed(() => {
@@ -352,16 +358,17 @@ function slidePostImages(post: CommunityPost, direction: -1 | 1) {
 async function loadHomeData() {
   apiState.loading = true
   try {
+    const timeSlot = selectedHomeTimeSlot.value
     const [cards, markers] = await Promise.all([
       spotApi.dashboard(homeExperience.value, selectedDate.value, homeSort.value, 6, geo.loc),
-      spotApi.markers(homeExperience.value, selectedDate.value, homeTimeSlot.value),
+      spotApi.markers(homeExperience.value, selectedDate.value, timeSlot),
     ])
     if (cards.length) {
-      homeCards[homeExperience.value] = await normalizeSpotRows(cards, homeExperience.value, selectedDate.value, homeTimeSlot.value)
+      homeCards[homeExperience.value] = await normalizeSpotRows(cards, homeExperience.value, selectedDate.value, timeSlot)
       syncFavoriteIds(homeCards[homeExperience.value])
     }
     if (markers.length) {
-      remoteSpots[homeExperience.value] = markers.map((row) => normalizeSpot(row, fallbackFor(row, homeExperience.value), homeTimeSlot.value))
+      remoteSpots[homeExperience.value] = markers.map((row) => normalizeSpot(row, fallbackFor(row, homeExperience.value), timeSlot))
     } else if (!remoteSpots[homeExperience.value].length) {
       const rows = await spotApi.list(homeExperience.value, selectedDate.value, homeSort.value, '', geo.loc)
       if (rows.length) remoteSpots[homeExperience.value] = rows.map((row) => normalizeSpot(row, fallbackFor(row, homeExperience.value)))
@@ -1463,11 +1470,11 @@ function titleForPage() {
 
       <section class="list-head">
         <div>
-          <h2>{{ EXPERIENCE_LABELS[homeExperience] }} 지수 · {{ homeDateLabel }} {{ homeTimeSlot }}</h2>
+          <h2>{{ EXPERIENCE_LABELS[homeExperience] }} 지수 · {{ homeDateLabel }}<template v-if="homeTimeSlotSelectable"> {{ homeTimeSlot }}</template></h2>
           <p>{{ homeSpots.length }}개 스팟 · 상위 {{ homePreview.length }}개 표시</p>
         </div>
         <div class="list-actions">
-          <div class="sort-controls time-slot-controls" aria-label="시간대 선택">
+          <div v-if="homeTimeSlotSelectable" class="sort-controls time-slot-controls" aria-label="시간대 선택">
             <button v-for="timeSlot in VALID_TIME_SLOTS" :key="timeSlot" :class="{ active: timeSlot === homeTimeSlot }" type="button" @click="setHomeTimeSlot(timeSlot)">
               {{ timeSlot }}
             </button>

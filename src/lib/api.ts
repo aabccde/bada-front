@@ -274,9 +274,10 @@ export const spotApi = {
     });
     return extractList<Record<string, unknown>>(data);
   },
-  async markers(experience: ExperienceKey, targetDate: string, timeSlot = currentApiTimeSlot()) {
+  async markers(experience: ExperienceKey, targetDate: string, timeSlot?: ApiTimeSlot) {
+    const params = { experience: toApiExperience(experience), targetDate, ...(timeSlot ? { timeSlot } : {}) };
     const { data } = await apiClient.get("/dashboard/markers", {
-      params: { experience: toApiExperience(experience), targetDate, timeSlot },
+      params,
     });
     return extractList<Record<string, unknown>>(data);
   },
