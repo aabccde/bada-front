@@ -1493,7 +1493,7 @@ function titleForPage() {
 
       <section class="list-head">
         <div>
-          <h2>{{ EXPERIENCE_LABELS[homeExperience] }} 지수 · {{ homeDateLabel }}<template v-if="homeTimeSlotSelectable"> {{ homeTimeSlot }}</template></h2>
+          <h2>{{ EXPERIENCE_LABELS[homeExperience] }} 지수</h2>
           <p>{{ homeSpots.length }}개 스팟 · 상위 {{ homePreview.length }}개 표시</p>
         </div>
         <div class="list-actions">
@@ -1664,7 +1664,7 @@ function titleForPage() {
         <div>
         <span class="eyebrow">{{ EXPERIENCE_LABELS[currentSpot.experience] }} · {{ currentSpot.region }}</span>
           <h1>{{ currentSpot.name }}</h1>
-          <p>{{ currentSpot.lat.toFixed(4) }}°N · {{ currentSpot.lot.toFixed(4) }}°E · {{ currentSpot.predcYmd }}<template v-if="spotTimeSlotSelectable"> {{ spotTimeSlot }}</template></p>
+          <p>{{ currentSpot.lat.toFixed(4) }}°N · {{ currentSpot.lot.toFixed(4) }}°E</p>
         </div>
         <div class="detail-actions">
           <div v-if="spotTimeSlotSelectable" class="sort-controls time-slot-controls" aria-label="시간대 선택">
