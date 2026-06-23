@@ -1,4 +1,4 @@
-// Date options: today + next 7 days (8 entries total)
+// Date options: today through the next 6 days (7 entries total)
 
 export interface DateOption {
   value: string; // YYYY-MM-DD
@@ -18,7 +18,7 @@ export function toYmd(d: Date): string {
 
 export function getDateOptions(base: Date = new Date()): DateOption[] {
   const opts: DateOption[] = [];
-  for (let i = 0; i <= 7; i++) {
+  for (let i = 0; i < 7; i++) {
     const d = new Date(base);
     d.setDate(base.getDate() + i);
     const wd = WEEKDAYS[d.getDay()];
