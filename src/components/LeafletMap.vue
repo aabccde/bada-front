@@ -222,7 +222,7 @@ function escapeHtml(value: string) {
         :class="{ active: activeWeatherLayer === 'base' }"
         @click="setWeatherLayer('base')"
       >
-        Base
+        기본
       </button>
       <button
         type="button"
@@ -230,16 +230,16 @@ function escapeHtml(value: string) {
         :disabled="radarLoading || radarUnavailable"
         @click="setWeatherLayer('radar')"
       >
-        {{ radarLoading ? 'Loading' : radarUnavailable ? 'Radar unavailable' : 'Radar' }}
+        {{ radarLoading ? '로딩 중' : radarUnavailable ? '레이더 오류' : '레이더' }}
       </button>
       <button
         type="button"
         :class="{ active: activeWeatherLayer === 'wind' }"
         :disabled="!windApiKey || windUnavailable"
-        :title="windApiKey ? 'Show wind layer' : 'Set VITE_OPENWEATHER_API_KEY to enable wind tiles'"
+        :title="windApiKey ? '바람 레이어 보기' : 'VITE_OPENWEATHER_API_KEY를 설정하면 바람 레이어를 볼 수 있습니다'"
         @click="setWeatherLayer('wind')"
       >
-        {{ !windApiKey ? 'Wind key needed' : windUnavailable ? 'Wind unavailable' : 'Wind' }}
+        {{ !windApiKey ? '바람 키 필요' : windUnavailable ? '바람 오류' : '바람' }}
       </button>
     </div>
   </div>

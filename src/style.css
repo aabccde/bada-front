@@ -674,28 +674,30 @@ textarea:focus {
   right: 16px;
   z-index: 500;
   display: flex;
-  gap: 4px;
-  padding: 4px;
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid rgba(226, 232, 240, 0.72);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.12);
+  background: rgba(255, 255, 255, 0.88);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
   backdrop-filter: blur(12px);
 }
 
 .map-layer-control button {
-  min-height: 32px;
-  padding: 0 12px;
+  min-height: 30px;
+  padding: 0 11px;
+  border: 0;
   border-radius: 999px;
+  background: transparent;
   color: var(--muted);
   font-size: 12px;
-  font-weight: 900;
+  font-weight: 800;
 }
 
 .map-layer-control button.active {
-  background: var(--foreground);
+  background: rgba(15, 23, 42, 0.9);
   color: white;
-  box-shadow: 0 4px 12px rgba(15, 23, 42, 0.16);
+  box-shadow: 0 3px 9px rgba(15, 23, 42, 0.12);
 }
 
 .map-layer-control button:disabled {
