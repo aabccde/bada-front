@@ -3,6 +3,8 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import L from 'leaflet'
 import { INDEX_LEVEL, type IndexLabel, type Spot } from '../lib/marine-data'
 
+type WeatherLayer = 'base' | 'radar' | 'wind'
+
 const props = withDefaults(
   defineProps<{
     spots: Spot[]
@@ -10,12 +12,14 @@ const props = withDefaults(
     focusId?: string
     highlightId?: string
     navigateOnClick?: boolean
+    weatherControls?: boolean
   }>(),
   {
     height: 380,
     focusId: undefined,
     highlightId: undefined,
     navigateOnClick: true,
+    weatherControls: false,
   },
 )
 
@@ -24,8 +28,15 @@ const emit = defineEmits<{
 }>()
 
 const container = ref<HTMLDivElement | null>(null)
+const activeWeatherLayer = ref<WeatherLayer>('base')
+const radarLoading = ref(false)
+const radarUnavailable = ref(false)
+const windUnavailable = ref(false)
+const windApiKey = import.meta.env.VITE_OPENWEATHER_API_KEY as string | undefined
 let map: L.Map | null = null
 let markerLayer: L.LayerGroup | null = null
+let radarLayer: L.TileLayer | null = null
+let windLayer: L.TileLayer | null = null
 
 onMounted(async () => {
   await nextTick()
@@ -36,6 +47,8 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   map?.remove()
   map = null
+  radarLayer = null
+  windLayer = null
 })
 
 watch(
@@ -65,6 +78,74 @@ function createMap() {
   }).addTo(map)
 
   markerLayer = L.layerGroup().addTo(map)
+}
+
+async function setWeatherLayer(layer: WeatherLayer) {
+  if (!map || activeWeatherLayer.value === layer) return
+
+  if (layer === 'radar') {
+    await ensureRadarLayer()
+    if (!radarLayer) return
+  }
+
+  if (layer === 'wind') {
+    ensureWindLayer()
+    if (!windLayer) return
+  }
+
+  radarLayer?.remove()
+  windLayer?.remove()
+
+  if (layer === 'radar') radarLayer?.addTo(map)
+  if (layer === 'wind') windLayer?.addTo(map)
+
+  activeWeatherLayer.value = layer
+}
+
+async function ensureRadarLayer() {
+  if (radarLayer || radarLoading.value) return
+
+  radarUnavailable.value = false
+  radarLoading.value = true
+
+  try {
+    const response = await fetch('https://api.rainviewer.com/public/weather-maps.json')
+    if (!response.ok) throw new Error('RainViewer manifest request failed')
+
+    const data = await response.json()
+    const frames = data?.radar?.past ?? []
+    const latest = frames.at(-1)
+    if (!data?.host || !latest?.path) throw new Error('RainViewer radar frame not found')
+
+    radarLayer = L.tileLayer(`${data.host}${latest.path}/512/{z}/{x}/{y}/2/1_1.png`, {
+      attribution: '&copy; <a href="https://www.rainviewer.com/">RainViewer</a>',
+      maxNativeZoom: 7,
+      maxZoom: 19,
+      opacity: 0.58,
+      zIndex: 320,
+    })
+  } catch {
+    radarUnavailable.value = true
+  } finally {
+    radarLoading.value = false
+  }
+}
+
+function ensureWindLayer() {
+  if (windLayer || !windApiKey) return
+
+  windLayer = L.tileLayer(`https://tile.openweathermap.org/map/wind_new/{z}/{x}/{y}.png?appid=${windApiKey}`, {
+    attribution: '&copy; <a href="https://openweathermap.org/">OpenWeather</a>',
+    maxZoom: 19,
+    opacity: 0.42,
+    zIndex: 310,
+  })
+
+  windLayer.on('tileerror', () => {
+    windUnavailable.value = true
+    windLayer?.remove()
+    if (activeWeatherLayer.value === 'wind') activeWeatherLayer.value = 'base'
+  })
 }
 
 function renderMarkers() {
@@ -133,5 +214,33 @@ function escapeHtml(value: string) {
 </script>
 
 <template>
-  <div ref="container" class="leaflet-map" :style="{ height: `${height}px` }"></div>
+  <div class="leaflet-map-shell" :class="{ 'has-weather-controls': weatherControls }">
+    <div ref="container" class="leaflet-map" :style="{ height: `${height}px` }"></div>
+    <div v-if="weatherControls" class="map-layer-control" aria-label="Weather map layers">
+      <button
+        type="button"
+        :class="{ active: activeWeatherLayer === 'base' }"
+        @click="setWeatherLayer('base')"
+      >
+        Base
+      </button>
+      <button
+        type="button"
+        :class="{ active: activeWeatherLayer === 'radar' }"
+        :disabled="radarLoading || radarUnavailable"
+        @click="setWeatherLayer('radar')"
+      >
+        {{ radarLoading ? 'Loading' : radarUnavailable ? 'Radar unavailable' : 'Radar' }}
+      </button>
+      <button
+        type="button"
+        :class="{ active: activeWeatherLayer === 'wind' }"
+        :disabled="!windApiKey || windUnavailable"
+        :title="windApiKey ? 'Show wind layer' : 'Set VITE_OPENWEATHER_API_KEY to enable wind tiles'"
+        @click="setWeatherLayer('wind')"
+      >
+        {{ !windApiKey ? 'Wind key needed' : windUnavailable ? 'Wind unavailable' : 'Wind' }}
+      </button>
+    </div>
+  </div>
 </template>

@@ -1451,7 +1451,7 @@ function titleForPage() {
         </div>
         <div class="legend"><span class="good"></span>좋음 <span class="warn"></span>보통 <span class="bad"></span>나쁨</div>
       </section>
-      <LeafletMap :spots="homeMapSpots" :height="420" :highlight-id="hoveredHomeSpotId" @navigate="(id) => navigate(`/spot/${id}`)" />
+      <LeafletMap :spots="homeMapSpots" :height="420" :highlight-id="hoveredHomeSpotId" weather-controls @navigate="(id) => navigate(`/spot/${id}`)" />
 
       <section class="list-head">
         <div>
