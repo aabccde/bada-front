@@ -623,7 +623,7 @@ function summary(spot: Spot) {
     case 'swimming':
       return { primary: `${spot.avgWtem}° · 파고 ${spot.maxWvhgt}m`, secondary: spot.opnStat }
     case 'fishing':
-      return { primary: `${spot.minWtem}-${spot.maxWtem}° · 파고 ${spot.maxWvhgt}m`, secondary: `${spot.seafsTgfshNm} · ${spot.tdlvHrCn}` }
+      return { primary: `${spot.minWtem}-${spot.maxWtem}° · 파고 ${spot.maxWvhgt}m`, secondary: `${fishLabel(spot)} · ${spot.tdlvHrCn}` }
     case 'scuba':
       return { primary: `${spot.minWtem}-${spot.maxWtem}° · 유속 ${spot.maxCrsp}kn`, secondary: `물때 ${spot.tdlvHrCn}` }
     case 'mudflat':
@@ -640,7 +640,7 @@ function highlight(spot: Spot) {
     case 'swimming':
       return { label: '개장 여부', value: spot.opnStat }
     case 'fishing':
-      return { label: '대상어 · 물때', value: `${spot.seafsTgfshNm} · ${spot.tdlvHrCn}` }
+      return { label: '대상어 · 물때', value: `${fishLabel(spot)} · ${spot.tdlvHrCn}` }
     case 'scuba':
       return { label: '물때', value: spot.tdlvHrCn }
     case 'mudflat':
@@ -697,6 +697,10 @@ function statsForCard(spot: Spot) {
   }
 }
 
+function fishLabel(spot: Spot) {
+  return spot.seafsTgfshNm && spot.seafsTgfshNm !== '-' ? spot.seafsTgfshNm : '어종 정보 없음'
+}
+
 function detailFields(spot: Spot) {
   switch (spot.experience) {
     case 'travel':
@@ -721,7 +725,7 @@ function detailFields(spot: Spot) {
       ]
     case 'fishing':
       return [
-        ['대상어', spot.seafsTgfshNm],
+        ['대상어', fishLabel(spot)],
         ['물때', spot.tdlvHrCn],
         ['기온', `${spot.minArtmp}~${spot.maxArtmp}°C`],
         ['수온', `${spot.minWtem}~${spot.maxWtem}°C`],
