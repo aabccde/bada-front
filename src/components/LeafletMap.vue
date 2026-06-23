@@ -234,31 +234,37 @@ function escapeHtml(value: string) {
 <template>
   <div class="leaflet-map-shell" :class="{ 'has-weather-controls': weatherControls }">
     <div ref="container" class="leaflet-map" :style="{ height: `${height}px` }"></div>
-    <div v-if="weatherControls" class="map-layer-control" aria-label="Weather map layers">
-      <button
-        type="button"
-        :class="{ active: !radarActive && !windActive }"
-        @click="showBaseLayer"
-      >
-        기본
-      </button>
-      <button
-        type="button"
-        :class="{ active: radarActive }"
-        :disabled="radarLoading || radarUnavailable"
-        @click="toggleRadarLayer"
-      >
-        {{ radarLoading ? '로딩 중' : radarUnavailable ? '레이더 오류' : '레이더' }}
-      </button>
-      <button
-        type="button"
-        :class="{ active: windActive }"
-        :disabled="!windApiKey || windUnavailable"
-        :title="windApiKey ? '바람 레이어 보기' : 'VITE_OPENWEATHER_API_KEY를 설정하면 바람 레이어를 볼 수 있습니다'"
-        @click="toggleWindLayer"
-      >
-        {{ !windApiKey ? '바람 키 필요' : windUnavailable ? '바람 오류' : '바람' }}
-      </button>
+    <div class="map-top-controls">
+      <div class="map-live-badge" aria-label="실시간 데이터">
+        <span aria-hidden="true"></span>
+        실시간
+      </div>
+      <div v-if="weatherControls" class="map-layer-control" aria-label="Weather map layers">
+        <button
+          type="button"
+          :class="{ active: !radarActive && !windActive }"
+          @click="showBaseLayer"
+        >
+          기본
+        </button>
+        <button
+          type="button"
+          :class="{ active: radarActive }"
+          :disabled="radarLoading || radarUnavailable"
+          @click="toggleRadarLayer"
+        >
+          {{ radarLoading ? '로딩 중' : radarUnavailable ? '레이더 오류' : '레이더' }}
+        </button>
+        <button
+          type="button"
+          :class="{ active: windActive }"
+          :disabled="!windApiKey || windUnavailable"
+          :title="windApiKey ? '바람 레이어 보기' : 'VITE_OPENWEATHER_API_KEY를 설정하면 바람 레이어를 볼 수 있습니다'"
+          @click="toggleWindLayer"
+        >
+          {{ !windApiKey ? '바람 키 필요' : windUnavailable ? '바람 오류' : '바람' }}
+        </button>
+      </div>
     </div>
   </div>
 </template>

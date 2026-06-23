@@ -674,11 +674,41 @@ textarea:focus {
   margin-bottom: 0;
 }
 
-.map-layer-control {
+.map-top-controls {
   position: absolute;
   top: 16px;
   right: 16px;
   z-index: 500;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.map-live-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 12px;
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--destructive);
+  font-size: 12px;
+  font-weight: 900;
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+  backdrop-filter: blur(12px);
+}
+
+.map-live-badge span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--destructive);
+  box-shadow: 0 0 0 4px rgba(239, 68, 68, 0.14);
+}
+
+.map-layer-control {
   display: flex;
   gap: 3px;
   padding: 3px;
