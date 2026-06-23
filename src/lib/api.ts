@@ -184,26 +184,26 @@ export function normalizeSpot(raw: Record<string, unknown>, fallback?: Spot, pre
   return {
     ...fallback,
     ...base,
-    tdlvHrCn: stringValue(pick(source, ["tdlvHrCn", "tide", "tideType", "tideName", "tideLevel", "tideTime", "물때"], fallbackField(fallback, "tdlvHrCn"))),
-    avgArtmp: numberValue(pick(source, ["avgArtmp", "airTemperature", "avgAirTemperature", "temperature", "기온"], fallbackField(fallback, "avgArtmp")), 0),
-    avgWspd: numberValue(pick(source, ["avgWspd", "windSpeed", "avgWindSpeed", "풍속"], fallbackField(fallback, "avgWspd")), 0),
-    avgWtem: numberValue(pick(source, ["avgWtem", "waterTemperature", "avgWaterTemperature", "수온"], fallbackField(fallback, "avgWtem")), 0),
-    avgWvhgt: numberValue(pick(source, ["avgWvhgt", "waveHeight", "avgWaveHeight", "파고"], fallbackField(fallback, "avgWvhgt")), 0),
-    avgCrsp: numberValue(pick(source, ["avgCrsp", "currentSpeed", "avgCurrentSpeed", "currentVelocity", "avgCurrentVelocity", "flowSpeed", "avgFlowSpeed", "유속"], fallbackField(fallback, "avgCrsp")), 0),
+    tdlvHrCn: stringValue(pick(source, ["tdlvHrCn", "tide", "tideStage", "tideType", "tideName", "tideLevel", "tideTime", "물때"], fallbackField(fallback, "tdlvHrCn"))),
+    avgArtmp: numberValue(pick(source, ["avgArtmp", "airTemperature", "avgAirTemperature", "airTemperatureMax", "temperature", "기온"], fallbackField(fallback, "avgArtmp")), 0),
+    avgWspd: numberValue(pick(source, ["avgWspd", "windSpeed", "avgWindSpeed", "windSpeedMax", "풍속"], fallbackField(fallback, "avgWspd")), 0),
+    avgWtem: numberValue(pick(source, ["avgWtem", "waterTemperature", "avgWaterTemperature", "waterTemperatureMax", "수온"], fallbackField(fallback, "avgWtem")), 0),
+    avgWvhgt: numberValue(pick(source, ["avgWvhgt", "waveHeight", "avgWaveHeight", "waveHeightMax", "파고"], fallbackField(fallback, "avgWvhgt")), 0),
+    avgCrsp: numberValue(pick(source, ["avgCrsp", "currentSpeed", "avgCurrentSpeed", "currentSpeedMax", "currentVelocity", "avgCurrentVelocity", "flowSpeed", "avgFlowSpeed", "유속"], fallbackField(fallback, "avgCrsp")), 0),
     weather: stringValue(pick(source, ["weather", "weatherText", "sky", "날씨"], fallbackField(fallback, "weather"))),
-    maxWvhgt: numberValue(pick(source, ["maxWvhgt", "maxWaveHeight", "waveHeight", "파고"], fallbackField(fallback, "maxWvhgt")), 0),
-    maxWspd: numberValue(pick(source, ["maxWspd", "maxWindSpeed", "windSpeed", "풍속"], fallbackField(fallback, "maxWspd")), 0),
+    maxWvhgt: numberValue(pick(source, ["maxWvhgt", "maxWaveHeight", "waveHeightMax", "waveHeight", "파고"], fallbackField(fallback, "maxWvhgt")), 0),
+    maxWspd: numberValue(pick(source, ["maxWspd", "maxWindSpeed", "windSpeedMax", "windSpeed", "풍속"], fallbackField(fallback, "maxWspd")), 0),
     opnStat: stringValue(pick(source, ["opnStat", "openStatus", "openingStatus", "beachOpenStatus", "개장여부"], fallbackField(fallback, "opnStat"))),
     seafsTgfshNm: stringValue(pick(source, ["seafsTgfshNm", "targetFish", "targetFishNames", "fishName", "fishNames", "fishSpecies", "targetFishName", "targetFishSpecies", "대상어"], fallbackField(fallback, "seafsTgfshNm"))),
-    minWvhgt: numberValue(pick(source, ["minWvhgt", "minWaveHeight", "waveHeight", "파고"], fallbackField(fallback, "minWvhgt")), 0),
-    minWtem: numberValue(pick(source, ["minWtem", "minWaterTemperature", "waterTemperature", "수온"], fallbackField(fallback, "minWtem")), 0),
-    maxWtem: numberValue(pick(source, ["maxWtem", "maxWaterTemperature", "waterTemperature"], fallbackField(fallback, "maxWtem")), 0),
-    minArtmp: numberValue(pick(source, ["minArtmp", "minAirTemperature", "airTemperature", "temperature", "기온"], fallbackField(fallback, "minArtmp")), 0),
-    maxArtmp: numberValue(pick(source, ["maxArtmp", "maxAirTemperature", "airTemperature"], fallbackField(fallback, "maxArtmp")), 0),
-    minWspd: numberValue(pick(source, ["minWspd", "minWindSpeed"], fallbackField(fallback, "minWspd")), 0),
-    maxWspd: numberValue(pick(source, ["maxWspd", "maxWindSpeed", "windSpeed"], fallbackField(fallback, "maxWspd")), 0),
-    minCrsp: numberValue(pick(source, ["minCrsp", "minCurrentSpeed", "currentSpeed", "minCurrentVelocity", "currentVelocity", "minFlowSpeed", "flowSpeed", "유속"], fallbackField(fallback, "minCrsp")), 0),
-    maxCrsp: numberValue(pick(source, ["maxCrsp", "maxCurrentSpeed", "currentSpeed", "maxCurrentVelocity", "currentVelocity", "maxFlowSpeed", "flowSpeed"], fallbackField(fallback, "maxCrsp")), 0),
+    minWvhgt: numberValue(pick(source, ["minWvhgt", "minWaveHeight", "waveHeightMin", "waveHeight", "파고"], fallbackField(fallback, "minWvhgt")), 0),
+    minWtem: numberValue(pick(source, ["minWtem", "minWaterTemperature", "waterTemperatureMin", "waterTemperature", "수온"], fallbackField(fallback, "minWtem")), 0),
+    maxWtem: numberValue(pick(source, ["maxWtem", "maxWaterTemperature", "waterTemperatureMax", "waterTemperature"], fallbackField(fallback, "maxWtem")), 0),
+    minArtmp: numberValue(pick(source, ["minArtmp", "minAirTemperature", "airTemperatureMin", "airTemperature", "temperature", "기온"], fallbackField(fallback, "minArtmp")), 0),
+    maxArtmp: numberValue(pick(source, ["maxArtmp", "maxAirTemperature", "airTemperatureMax", "airTemperature"], fallbackField(fallback, "maxArtmp")), 0),
+    minWspd: numberValue(pick(source, ["minWspd", "minWindSpeed", "windSpeedMin"], fallbackField(fallback, "minWspd")), 0),
+    maxWspd: numberValue(pick(source, ["maxWspd", "maxWindSpeed", "windSpeedMax", "windSpeed"], fallbackField(fallback, "maxWspd")), 0),
+    minCrsp: numberValue(pick(source, ["minCrsp", "minCurrentSpeed", "currentSpeedMin", "currentSpeed", "minCurrentVelocity", "currentVelocity", "minFlowSpeed", "flowSpeed", "유속"], fallbackField(fallback, "minCrsp")), 0),
+    maxCrsp: numberValue(pick(source, ["maxCrsp", "maxCurrentSpeed", "currentSpeedMax", "currentSpeed", "maxCurrentVelocity", "currentVelocity", "maxFlowSpeed", "flowSpeed"], fallbackField(fallback, "maxCrsp")), 0),
     mdftExprnBgngTm: stringValue(pick(source, ["mdftExprnBgngTm", "mdftExprnBgnTm", "mdftExprnBeginTm", "mudflatExperienceStartTime", "mudflatExperienceBeginTime", "experienceStartTime", "experienceBeginTime", "availableStartTime", "availableBeginTime", "startTime", "beginTime", "mudflatStartTime", "mudflatBeginTime", "체험시작", "체험시작시간"], fallbackField(fallback, "mdftExprnBgngTm"))),
     mdftExprnEndTm: stringValue(pick(source, ["mdftExprnEndTm", "mudflatExperienceEndTime", "experienceEndTime", "availableEndTime", "endTime", "mudflatEndTime", "체험종료", "체험종료시간"], fallbackField(fallback, "mdftExprnEndTm"))),
     avgWvpd: numberValue(pick(source, ["avgWvpd", "wavePeriod", "avgWavePeriod", "파주기"], fallbackField(fallback, "avgWvpd")), 0),
@@ -381,8 +381,26 @@ function selectedForecast(value: unknown, preferredTimeSlot?: ApiTimeSlot): Reco
   if (!Array.isArray(value)) return {};
   const forecasts = value.filter((item): item is Record<string, unknown> => Boolean(item && typeof item === "object" && !Array.isArray(item)));
   if (!forecasts.length) return {};
-  if (!preferredTimeSlot) return forecasts[0];
-  return forecasts.find((forecast) => normalizeTimeSlot(forecast.timeSlot) === preferredTimeSlot) ?? forecasts[0];
+  const matches = preferredTimeSlot ? forecasts.filter((forecast) => normalizeTimeSlot(forecast.timeSlot) === preferredTimeSlot) : [forecasts[0]];
+  const selected = matches.length ? matches : [forecasts[0]];
+  return mergeForecasts(selected);
+}
+
+function mergeForecasts(forecasts: Record<string, unknown>[]) {
+  const merged: Record<string, unknown> = {};
+  const mergedMetrics: Record<string, unknown> = {};
+  const targetFish = new Set<string>();
+
+  for (const forecast of forecasts) {
+    const metrics = objectValue(forecast.metrics);
+    Object.assign(merged, forecast);
+    Object.assign(mergedMetrics, metrics);
+    const fish = metrics.targetFish ?? forecast.targetFish;
+    if (fish !== undefined && fish !== null && fish !== "") targetFish.add(String(fish));
+  }
+
+  if (targetFish.size) mergedMetrics.targetFish = [...targetFish].join(", ");
+  return { ...merged, metrics: mergedMetrics };
 }
 
 function pick(source: Record<string, unknown>, keys: string[], fallback?: unknown) {

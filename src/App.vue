@@ -81,6 +81,7 @@ const allRegion = ref<string | undefined>()
 const homeExperience = ref<ExperienceKey>('travel')
 const homeSort = ref<SortKey>('index')
 const homeTimeSlot = ref<ApiTimeSlot>(currentApiTimeSlot())
+const spotTimeSlot = ref<ApiTimeSlot>(currentApiTimeSlot())
 const hoveredHomeSpotId = ref<string | undefined>()
 const openDateMenu = ref<'home' | 'all' | null>(null)
 const selectedDate = ref(defaultDate())
@@ -164,11 +165,7 @@ const homeSorted = computed(() => sortSpots(homeCardSpots.value, homeSort.value,
 const homeMapSpots = computed(() => sortSpots(homeSpots.value, homeSort.value, { counts: counts.value, userLoc: geo.loc }))
 const homePreview = computed(() => homeSorted.value.slice(0, 6))
 const homeDateLabel = computed(() => dateOptions.value.find((o) => o.value === selectedDate.value)?.label ?? selectedDate.value)
-const homeTimeSlotSelectable = computed(() => {
-  const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() + 3)
-  return selectedDate.value < toYmd(cutoff)
-})
+const homeTimeSlotSelectable = computed(() => isTimeSlotSelectable(selectedDate.value))
 const selectedHomeTimeSlot = computed(() => (homeTimeSlotSelectable.value ? homeTimeSlot.value : undefined))
 
 const allSpots = computed(() => spotsFor(allExp.value))
@@ -194,6 +191,9 @@ const allStats = computed(() => ({
 const topSpot = computed(() => sortedAll.value[0])
 const listDateLabel = computed(() => dateOptions.value.find((o) => o.value === listDate.value)?.label ?? listDate.value)
 const currentSpot = computed(() => getSpot(spotId.value))
+const spotTargetDate = computed(() => (spotId.value ? targetDateForSpot(spotId.value) : selectedDate.value))
+const spotTimeSlotSelectable = computed(() => isTimeSlotSelectable(spotTargetDate.value))
+const selectedSpotTimeSlot = computed(() => (spotTimeSlotSelectable.value ? spotTimeSlot.value : undefined))
 const spotPosts = computed(() => community.value.filter((post) => post.spotId === spotId.value))
 const myPosts = computed(() =>
   community.value.filter((post) => canManagePost(post)),
@@ -242,6 +242,10 @@ watch([page, spotId, listDate], () => {
     void loadMyPosts()
     void loadFavoriteSpots()
   }
+})
+
+watch(spotTimeSlot, () => {
+  if (page.value === 'spot' && spotId.value) void loadSpotDetail(spotId.value)
 })
 
 function applyRoute() {
@@ -499,7 +503,7 @@ async function loadSpotDetail(id: string) {
   const fallback = getSpot(id)
   try {
     const raw = await spotApi.detail(id, targetDateForSpot(id))
-    remoteSpotDetails[id] = normalizeSpot(raw, fallback)
+    remoteSpotDetails[id] = normalizeSpot(raw, fallback, selectedSpotTimeSlot.value)
     syncFavoriteIds([remoteSpotDetails[id]])
     apiState.error = ''
   } catch (error) {
@@ -576,6 +580,16 @@ function setHomeSort(sort: SortKey) {
 
 function setHomeTimeSlot(timeSlot: ApiTimeSlot) {
   homeTimeSlot.value = timeSlot
+}
+
+function setSpotTimeSlot(timeSlot: ApiTimeSlot) {
+  spotTimeSlot.value = timeSlot
+}
+
+function isTimeSlotSelectable(targetDate: string) {
+  const cutoff = new Date()
+  cutoff.setDate(cutoff.getDate() + 3)
+  return targetDate < toYmd(cutoff)
 }
 
 function requestLocation() {
@@ -1650,9 +1664,14 @@ function titleForPage() {
         <div>
         <span class="eyebrow">{{ EXPERIENCE_LABELS[currentSpot.experience] }} · {{ currentSpot.region }}</span>
           <h1>{{ currentSpot.name }}</h1>
-          <p>{{ currentSpot.lat.toFixed(4) }}°N · {{ currentSpot.lot.toFixed(4) }}°E · {{ currentSpot.predcYmd }}</p>
+          <p>{{ currentSpot.lat.toFixed(4) }}°N · {{ currentSpot.lot.toFixed(4) }}°E · {{ currentSpot.predcYmd }}<template v-if="spotTimeSlotSelectable"> {{ spotTimeSlot }}</template></p>
         </div>
         <div class="detail-actions">
+          <div v-if="spotTimeSlotSelectable" class="sort-controls time-slot-controls" aria-label="시간대 선택">
+            <button v-for="timeSlot in VALID_TIME_SLOTS" :key="timeSlot" :class="{ active: timeSlot === spotTimeSlot }" type="button" @click="setSpotTimeSlot(timeSlot)">
+              {{ timeSlot }}
+            </button>
+          </div>
           <button
             class="icon-action favorite-action"
             :class="{ active: favoriteIds.has(currentSpot.id) }"
