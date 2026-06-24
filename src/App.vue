@@ -382,10 +382,13 @@ async function loadHomeData() {
       if (token !== homeLoadToken) return
       syncFavoriteIds(homeCards[exp])
     }
-    if (markers.length) {
-      remoteSpots[exp] = markers.map((row) => normalizeSpot(row, fallbackFor(row, exp), timeSlot))
+    const mapRows = await homeMapRows(exp, targetDate, sort, markers, cards, timeSlot)
+    if (token !== homeLoadToken) return
+    if (mapRows.length) {
+      remoteSpots[exp] = mapRows.map((row) => normalizeSpot(row, fallbackFor(row, exp), timeSlot))
     } else if (!remoteSpots[exp].length) {
-      const rows = await spotApi.list(exp, targetDate, sort, '', geo.loc)
+      const mapFallbackSort = exp === 'mudflat' && sort === 'ai' ? 'index' : sort
+      const rows = await spotApi.list(exp, targetDate, mapFallbackSort, '', geo.loc)
       if (token !== homeLoadToken) return
       if (rows.length) remoteSpots[exp] = rows.map((row) => normalizeSpot(row, fallbackFor(row, exp), timeSlot))
     }
@@ -395,6 +398,16 @@ async function loadHomeData() {
     apiState.error = apiErrorMessage(error)
   } finally {
     if (token === homeLoadToken) apiState.loading = false
+  }
+}
+
+async function homeMapRows(exp: ExperienceKey, targetDate: string, sort: SortKey, markers: Record<string, unknown>[], cards: Record<string, unknown>[], timeSlot?: ApiTimeSlot) {
+  if (exp !== 'mudflat' || sort !== 'ai') return markers
+  try {
+    const rows = await spotApi.list(exp, targetDate, 'index', '', geo.loc)
+    return rows.length > markers.length || markers.length <= cards.length ? rows : markers
+  } catch {
+    return markers
   }
 }
 
