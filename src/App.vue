@@ -68,19 +68,19 @@ type Toast = {
 }
 
 const VALID_EXP: ExperienceKey[] = ['travel', 'surfing', 'fishing', 'scuba', 'mudflat', 'swimming']
-const VALID_SORT: SortKey[] = ['index', 'community', 'distance']
+const VALID_SORT: SortKey[] = ['ai', 'index', 'community', 'distance']
 const VALID_TIME_SLOTS: ApiTimeSlot[] = ['오전', '오후']
 
 const page = ref<Page>('home')
 const spotId = ref('')
 const allExp = ref<ExperienceKey>('travel')
-const allSort = ref<SortKey>('index')
+const allSort = ref<SortKey>('ai')
 const allQuery = ref('')
 const allRegion = ref<string | undefined>()
 const allTimeSlot = ref<ApiTimeSlot>(currentApiTimeSlot())
 
 const homeExperience = ref<ExperienceKey>('travel')
-const homeSort = ref<SortKey>('index')
+const homeSort = ref<SortKey>('ai')
 const homeTimeSlot = ref<ApiTimeSlot>(currentApiTimeSlot())
 const spotTimeSlot = ref<ApiTimeSlot>(currentApiTimeSlot())
 const hoveredHomeSpotId = ref<string | undefined>()
@@ -306,7 +306,7 @@ function parseExp(value: string | null): ExperienceKey {
 }
 
 function parseSort(value: string | null): SortKey {
-  return VALID_SORT.includes(value as SortKey) ? (value as SortKey) : 'index'
+  return VALID_SORT.includes(value as SortKey) ? (value as SortKey) : 'ai'
 }
 
 function spotsFor(exp: ExperienceKey) {
@@ -650,6 +650,11 @@ function analysisSummary(spot: Spot) {
 
 function aiRecommendationReason(spot: Spot) {
   const reason = spot.recommendationReason?.trim()
+  return reason && reason !== '-' ? reason : ''
+}
+
+function cardAiReason(spot: Spot) {
+  const reason = spot.aiReason?.trim()
   return reason && reason !== '-' ? reason : ''
 }
 
@@ -1565,6 +1570,10 @@ function titleForPage() {
           <div class="highlight">
             <span>{{ highlight(spot).label }}</span>
             <strong>{{ highlight(spot).value }}</strong>
+          </div>
+          <div v-if="cardAiReason(spot)" class="ai-card-reason">
+            <span>AI 추천</span>
+            <p>{{ cardAiReason(spot) }}</p>
           </div>
           <div class="stats-grid">
             <div v-for="[label, value] in statsForCard(spot)" :key="label">

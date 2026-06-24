@@ -46,7 +46,7 @@ apiClient.interceptors.response.use(
 );
 
 export type ApiExperience = "seaTravel" | "swimming" | "mudflat" | "scuba" | "fishing" | "surfing";
-export type ApiSort = "index" | "community" | "nearby";
+export type ApiSort = "ai" | "index" | "community" | "nearby";
 export type AppSort = ApiSort | "distance";
 export type ApiTimeSlot = "오전" | "오후";
 
@@ -179,6 +179,7 @@ export function normalizeSpot(raw: Record<string, unknown>, fallback?: Spot, pre
     totalIndex,
     postCount: numberValue(pick(source, ["postCount", "commentCount"], fallback?.postCount), 0),
     favorite: booleanValue(pick(source, ["favorite", "favorited", "isFavorite"], fallback?.favorite ?? false)),
+    aiReason: optionalStringValue(pick(source, ["aiReason", "aiSummaryReason"], fallback?.aiReason)),
     recommendationReason: optionalStringValue(pick(source, ["recommendationReason", "aiRecommendationReason"], fallback?.recommendationReason)),
   };
 

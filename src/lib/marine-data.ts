@@ -53,6 +53,7 @@ export interface BaseSpot {
   totalIndex: IndexLabel;
   postCount?: number;
   favorite?: boolean;
+  aiReason?: string;
   recommendationReason?: string;
 }
 

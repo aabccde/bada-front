@@ -1,12 +1,13 @@
 import type { Spot } from "./marine-data";
 import { INDEX_LEVEL } from "./marine-data";
 
-export type SortKey = "index" | "community" | "distance";
+export type SortKey = "ai" | "index" | "community" | "distance";
 
 export const SORT_LABELS: Record<SortKey, string> = {
+  ai: "AI추천순",
   index: "지수 높은 순",
-  community: "커뮤니티 인기 순",
-  distance: "가까운 순",
+  community: "커뮤니티 인기순",
+  distance: "가까운순",
 };
 
 export function filterByQuery(spots: Spot[], q: string): Spot[] {
@@ -41,6 +42,8 @@ export interface SortOpts {
 export function sortSpots(spots: Spot[], key: SortKey, opts: SortOpts = {}): Spot[] {
   const arr = [...spots];
   switch (key) {
+    case "ai":
+      break;
     case "index":
       arr.sort((a, b) => INDEX_LEVEL[b.totalIndex] - INDEX_LEVEL[a.totalIndex]);
       break;
