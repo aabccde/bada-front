@@ -1749,7 +1749,7 @@ function titleForPage() {
             <p>{{ currentSpot.lat.toFixed(4) }}°N · {{ currentSpot.lot.toFixed(4) }}°E</p>
           </div>
         </div>
-        <LeafletMap class="detail-map" :spots="[currentSpot]" :focus-id="currentSpot.id" :height="360" :navigate-on-click="false" />
+        <LeafletMap class="detail-map" :spots="[currentSpot]" :focus-id="currentSpot.id" :height="360" :navigate-on-click="false" :show-live-badge="false" />
       </section>
       <section class="community">
         <div class="section-head compact">

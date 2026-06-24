@@ -11,6 +11,7 @@ const props = withDefaults(
     highlightId?: string
     navigateOnClick?: boolean
     weatherControls?: boolean
+    showLiveBadge?: boolean
   }>(),
   {
     height: 380,
@@ -18,6 +19,7 @@ const props = withDefaults(
     highlightId: undefined,
     navigateOnClick: true,
     weatherControls: false,
+    showLiveBadge: true,
   },
 )
 
@@ -235,7 +237,7 @@ function escapeHtml(value: string) {
   <div class="leaflet-map-shell" :class="{ 'has-weather-controls': weatherControls }">
     <div ref="container" class="leaflet-map" :style="{ height: `${height}px` }"></div>
     <div class="map-top-controls">
-      <div class="map-live-badge" aria-label="실시간 데이터">
+      <div v-if="showLiveBadge" class="map-live-badge" aria-label="실시간 데이터">
         <span aria-hidden="true"></span>
         실시간
       </div>
