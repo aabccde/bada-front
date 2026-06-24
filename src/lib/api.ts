@@ -95,6 +95,11 @@ export interface ApiComment {
   user?: ApiUser;
 }
 
+export interface AiChatResponse {
+  content: string;
+  createdAt?: string;
+}
+
 const apiExperienceMap: Record<ExperienceKey, ApiExperience> = {
   travel: "seaTravel",
   swimming: "swimming",
@@ -298,6 +303,13 @@ export const spotApi = {
   },
   async unfavorite(spotId: string) {
     await apiClient.delete(`/spots/${spotId}/favorite`);
+  },
+};
+
+export const aiApi = {
+  async chat(message: string) {
+    const { data } = await apiClient.post("/ai/chat-completions", { message });
+    return unwrap<AiChatResponse>(data);
   },
 };
 
